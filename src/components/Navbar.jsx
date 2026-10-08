@@ -51,8 +51,17 @@ export default function Navbar({
             <div className="flex flex-col text-left">
               <span className="text-[11px] text-stone-500 leading-tight">Delivery to</span>
               <span className="font-semibold text-stone-800 leading-tight truncate max-w-[200px]">
-                {deliveryLocation || "Sahiwal - eta 45 min"}
+                {deliveryLocation?.address || 'Choose a delivery location'}
               </span>
+              {deliveryLocation && (
+                <span className={`text-[10px] leading-tight ${deliveryLocation.deliveryAvailable === false ? 'text-rose-600' : 'text-emerald-700'}`}>
+                  {deliveryLocation.deliveryAvailable === false
+                    ? 'Delivery unavailable'
+                    : deliveryLocation.etaMinutes
+                      ? `Estimated delivery ${deliveryLocation.etaMinutes} min`
+                      : 'Availability pending'}
+                </span>
+              )}
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
           </button>

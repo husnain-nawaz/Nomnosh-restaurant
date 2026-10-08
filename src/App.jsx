@@ -18,7 +18,7 @@ export default function App() {
   const [products, setProducts] = useState([]);
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [deliveryLocation, setDeliveryLocation] = useState('Sahiwal - Fateh Sher Colony (eta 40 min)');
+  const [deliveryLocation, setDeliveryLocation] = useState(null);
 
   // Cart State with localStorage persistence
   const [cart, setCart] = useState(() => {
@@ -48,19 +48,12 @@ export default function App() {
 
   // Check user session on load
   useEffect(() => {
-    const token = localStorage.getItem('nomnosh_token');
-    if (token) {
-      fetch('/api/auth/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
+    fetch('/api/auth/me', { credentials: 'include' })
         .then(res => res.ok ? res.json() : Promise.reject())
         .then(data => {
           if (data?.user) setCurrentUser(data.user);
         })
-        .catch(() => {
-          localStorage.removeItem('nomnosh_token');
-        });
-    }
+        .catch(() => setCurrentUser(null));
   }, []);
 
   // Fetch Categories & Menu Items
@@ -118,8 +111,8 @@ export default function App() {
     setCart([]);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('nomnosh_token');
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     setCurrentUser(null);
     if (viewMode === 'dashboard') setViewMode('storefront');
   };

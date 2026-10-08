@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Mail, Lock, User, Phone, MapPin, ArrowRight, ShieldCheck, Sparkles, Loader2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X, Mail, Lock, User, Phone, MapPin, ArrowRight, Loader2 } from 'lucide-react';
 
 export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
   if (!isOpen) return null;
@@ -13,40 +13,21 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Quick Demo Logins
-  const handleQuickDemo = (type) => {
-    if (type === 'admin') {
-      setEmail('admin@nomnoshpizza.com');
-      setPassword('admin123');
-    } else {
-      setEmail('sale@meezu.pk');
-      setPassword('password123');
-    }
-  };
-
-  // Google Login Simulation & Direct GIS Payload
-  const handleGoogleSignIn = async () => {
+  const googleButtonRef = useRef(null);
+  const handleGoogleCredential = async (response) => {
     setIsLoading(true);
     setErrorMessage('');
     try {
-      // In production or web client, GIS returns Google credential token or user profile
-      const googleUser = {
-        email: email && email.includes('@') ? email : 'customer.google@nomnoshpizza.com',
-        name: name ? name : 'Google Gourmet',
-        sub: 'google_oauth_' + Math.floor(100000 + Math.random() * 900000),
-        picture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=GoogleUser'
-      };
-
       const res = await fetch('/api/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(googleUser)
+        credentials: 'include',
+        body: JSON.stringify({ credential: response.credential })
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Google login failed');
 
-      localStorage.setItem('nomnosh_token', data.token);
       onAuthSuccess(data.user);
       onClose();
     } catch (err) {
@@ -55,6 +36,32 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isOpen || !googleButtonRef.current) return;
+    const renderGoogleButton = () => {
+      if (!window.google?.accounts?.id || !googleButtonRef.current) return;
+      googleButtonRef.current.innerHTML = '';
+      window.google.accounts.id.initialize({
+        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredential,
+        ux_mode: 'popup'
+      });
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: 'outline', size: 'large', width: 360, text: 'continue_with', shape: 'rectangular'
+      });
+    };
+    if (window.google?.accounts?.id) renderGoogleButton();
+    else {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onload = renderGoogleButton;
+      script.onerror = () => setErrorMessage('Unable to load Google Sign-In. Check your connection and try again.');
+      document.head.appendChild(script);
+    }
+  }, [isOpen]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -76,7 +83,6 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Authentication failed');
 
-      localStorage.setItem('nomnosh_token', data.token);
       onAuthSuccess(data.user);
       onClose();
     } catch (err) {
@@ -140,63 +146,12 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Google Sign In Button */}
-          <button
-            onClick={handleGoogleSignIn}
-            disabled={isLoading}
-            className="w-full py-2.5 px-4 rounded-xl border border-stone-300 hover:border-stone-400 bg-white hover:bg-stone-50 text-stone-800 text-xs font-bold flex items-center justify-center gap-3 shadow-2xs active:scale-95 transition-all"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-              />
-            </svg>
-            <span>Continue with Google</span>
-          </button>
+          <div ref={googleButtonRef} className="min-h-10 flex justify-center" aria-label="Continue with Google" />
 
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-stone-200" />
             <span className="text-[11px] font-medium text-stone-400 uppercase tracking-wider">or email</span>
             <div className="flex-1 h-px bg-stone-200" />
-          </div>
-
-          {/* Quick Demo Credentials shortcut */}
-          <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200/80 space-y-1.5">
-            <div className="flex items-center justify-between text-[11px] font-bold text-amber-900">
-              <span className="flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                Quick Test Credentials:
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('admin')}
-                className="flex-1 py-1.5 px-2 bg-stone-900 hover:bg-stone-800 text-amber-400 rounded-lg text-[10px] font-bold tracking-tight transition-colors"
-              >
-                Admin (Store Manager)
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('customer')}
-                className="flex-1 py-1.5 px-2 bg-amber-200 hover:bg-amber-300 text-amber-950 rounded-lg text-[10px] font-bold tracking-tight transition-colors"
-              >
-                Customer (Sale Meezu)
-              </button>
-            </div>
           </div>
 
           {/* Form */}
@@ -282,7 +237,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                       rows={2}
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      placeholder="Sahiwal Colony, Sahiwal"
+                      placeholder="Enter your delivery address"
                       className="w-full pl-9 pr-3 py-2 rounded-xl border border-stone-300 focus:border-amber-500 text-xs text-stone-900 outline-hidden resize-none"
                     />
                   </div>

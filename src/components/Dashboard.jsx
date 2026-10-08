@@ -34,15 +34,14 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('nomnosh_token');
-      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const headers = {};
 
       const [statsRes, ordersRes, menuRes, catRes, schemaRes] = await Promise.all([
-        fetch('/api/stats', { headers }),
-        fetch('/api/orders', { headers }),
+        fetch('/api/stats', { headers, credentials: 'include' }),
+        fetch('/api/orders', { headers, credentials: 'include' }),
         fetch('/api/products'),
         fetch('/api/categories'),
-        fetch('/api/mysql/schema', { headers })
+        fetch('/api/mysql/schema', { headers, credentials: 'include' })
       ]);
 
       if (statsRes.ok) setStats(await statsRes.json());
@@ -64,13 +63,11 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
   // Update order status
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
-      const token = localStorage.getItem('nomnosh_token');
       const res = await fetch(`/api/orders/${orderId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        }, credentials: 'include',
         body: JSON.stringify({ status: newStatus })
       });
       if (res.ok) {
@@ -88,13 +85,11 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
     if (!newItemName || !newItemPrice) return;
 
     try {
-      const token = localStorage.getItem('nomnosh_token');
       const res = await fetch('/api/products', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        }, credentials: 'include',
         body: JSON.stringify({
           name: newItemName,
           category_slug: newItemCategory,
@@ -120,10 +115,9 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
   const handleDeleteMenuItem = async (id) => {
     if (!confirm('Are you sure you want to remove this item?')) return;
     try {
-      const token = localStorage.getItem('nomnosh_token');
       const res = await fetch(`/api/products/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       if (res.ok) {
         setMenuItems(menuItems.filter(i => i.id !== id));
@@ -138,13 +132,11 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
     setSqlLoading(true);
     setSqlResult(null);
     try {
-      const token = localStorage.getItem('nomnosh_token');
       const res = await fetch('/api/mysql/query', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        }, credentials: 'include',
         body: JSON.stringify({ sql: sqlQuery })
       });
       const data = await res.json();
@@ -160,10 +152,9 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
   const handleResetDb = async () => {
     if (!confirm('Reset MySQL database to original PDF seed data?')) return;
     try {
-      const token = localStorage.getItem('nomnosh_token');
       await fetch('/api/mysql/reset', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       fetchData();
       alert('Database restored successfully!');

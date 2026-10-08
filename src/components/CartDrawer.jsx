@@ -23,7 +23,7 @@ export default function CartDrawer({
   // Checkout form fields
   const [customerName, setCustomerName] = useState(currentUser?.name || '');
   const [customerPhone, setCustomerPhone] = useState(currentUser?.phone || '+92 300 1234567');
-  const [deliveryAddress, setDeliveryAddress] = useState(currentUser?.address || '88-A Fateh Sher Colony, Sahiwal');
+  const [deliveryAddress, setDeliveryAddress] = useState(currentUser?.address || '');
   const [paymentMethod, setPaymentMethod] = useState('cash_on_delivery');
   const [orderNotes, setOrderNotes] = useState('');
 
@@ -62,18 +62,17 @@ export default function CartDrawer({
 
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('nomnosh_token');
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({
           customer_name: customerName,
           customer_phone: customerPhone,
           customer_email: currentUser?.email || '',
-          delivery_address: orderType === 'delivery' ? deliveryAddress : 'Takeaway from Store (88-A Main Fateh Sher Road)',
+          delivery_address: orderType === 'delivery' ? deliveryAddress : 'Takeaway from store',
           city: 'Sahiwal',
           order_type: orderType,
           items: cart,
@@ -313,7 +312,7 @@ export default function CartDrawer({
                       required
                       value={deliveryAddress}
                       onChange={(e) => setDeliveryAddress(e.target.value)}
-                      placeholder="House / Flat No, Street, Colony, Sahiwal"
+                      placeholder="House / Flat No, Street, Colony"
                       className="w-full px-3 py-2 rounded-xl border border-stone-300 focus:border-amber-500 text-xs text-stone-900 outline-hidden resize-none"
                     />
                   </div>

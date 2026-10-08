@@ -1007,6 +1007,10 @@ class MySqlEngine {
   getUserByEmail(email) {
     return this.db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
   }
+
+  getUserByGoogleId(googleId) {
+    return this.db.users.find(u => u.google_id === googleId);
+  }
   getUserById(id) {
     return this.db.users.find(u => u.id === Number(id));
   }

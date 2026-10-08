@@ -35,6 +35,18 @@
       "phone": null,
       "address": null,
       "created_at": "2026-10-08 14:44:56"
+    },
+    {
+      "id": 4,
+      "name": "Google Foodie",
+      "email": "google.user@example.com",
+      "password_hash": null,
+      "role": "customer",
+      "google_id": "gid_4v74nhh",
+      "avatar_url": "https://api.dicebear.com/7.x/avataaars/svg?seed=Google%20Foodie",
+      "phone": null,
+      "address": null,
+      "created_at": "2026-10-08 15:29:56"
     }
   ],
   "categories": [
