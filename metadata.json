@@ -1,0 +1,6 @@
+{
+  "name": "NOM NOSH Pizza & Restaurant",
+  "description": "Order authentic oven-baked pizzas, combos, burgers, and appetizers online from NOM NOSH Pizza with live tracking and staff admin dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
