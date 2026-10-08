@@ -1,1 +1,28 @@
 @import "tailwindcss";
+
+/* Green restaurant theme */
+@layer utilities {
+  .bg-amber-500 { background-color: #16a34a !important; }
+  .bg-amber-600 { background-color: #15803d !important; }
+  .bg-amber-700 { background-color: #166534 !important; }
+  .bg-amber-50 { background-color: #f0fdf4 !important; }
+  .bg-amber-100 { background-color: #dcfce7 !important; }
+  .bg-amber-50\/60 { background-color: rgb(240 253 244 / .6) !important; }
+  .bg-amber-50\/70 { background-color: rgb(240 253 244 / .7) !important; }
+  .text-amber-300 { color: #86efac !important; }
+  .text-amber-400 { color: #4ade80 !important; }
+  .text-amber-500 { color: #22c55e !important; }
+  .text-amber-600 { color: #16a34a !important; }
+  .text-amber-700 { color: #15803d !important; }
+  .text-amber-800 { color: #166534 !important; }
+  .text-amber-900 { color: #14532d !important; }
+  .text-amber-950 { color: #052e16 !important; }
+  .border-amber-200 { border-color: #bbf7d0 !important; }
+  .border-amber-300 { border-color: #86efac !important; }
+  .border-amber-500 { border-color: #22c55e !important; }
+  .border-amber-500\/30 { border-color: rgb(34 197 94 / .3) !important; }
+  .shadow-amber-500\/25 { --tw-shadow-color: rgb(34 197 94 / .25) !important; }
+  .from-amber-600 { --tw-gradient-from: #15803d !important; }
+  .to-orange-500 { --tw-gradient-to: #22c55e !important; }
+  .selection\:bg-amber-500::selection { background-color: #16a34a !important; }
+}
