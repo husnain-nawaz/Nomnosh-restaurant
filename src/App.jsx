@@ -18,7 +18,14 @@ export default function App() {
   const [products, setProducts] = useState([]);
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [deliveryLocation, setDeliveryLocation] = useState(null);
+  const [deliveryLocation, setDeliveryLocation] = useState(() => {
+    try {
+      const saved = localStorage.getItem('nomnosh_delivery_location');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Cart State with localStorage persistence
   const [cart, setCart] = useState(() => {
@@ -46,12 +53,31 @@ export default function App() {
     }
   }, [cart]);
 
+  useEffect(() => {
+    try {
+      if (deliveryLocation) localStorage.setItem('nomnosh_delivery_location', JSON.stringify(deliveryLocation));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [deliveryLocation]);
+
+  // Require a delivery location before storefront ordering begins.
+  useEffect(() => {
+    const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
+    if (deliveryLocation || isAdmin || viewMode === 'dashboard') return undefined;
+    const timer = window.setTimeout(() => setIsLocationOpen(true), 3000);
+    return () => window.clearTimeout(timer);
+  }, [deliveryLocation, currentUser, viewMode]);
+
   // Check user session on load
   useEffect(() => {
     fetch('/api/auth/me', { credentials: 'include' })
         .then(res => res.ok ? res.json() : Promise.reject())
         .then(data => {
-          if (data?.user) setCurrentUser(data.user);
+          if (data?.user) {
+            setCurrentUser(data.user);
+            if (data.user.role === 'admin' || data.user.role === 'super_admin') setViewMode('dashboard');
+          }
         })
         .catch(() => setCurrentUser(null));
   }, []);
@@ -142,6 +168,7 @@ export default function App() {
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenLocation={() => setIsLocationOpen(true)}
         currentUser={currentUser}
+        currentLocation={deliveryLocation}
         onLogout={handleLogout}
         viewMode={viewMode}
         setViewMode={setViewMode}
@@ -269,9 +296,8 @@ export default function App() {
         onRemoveItem={handleRemoveItem}
         onClearCart={handleClearCart}
         currentUser={currentUser}
-        onOrderPlaced={(order) => {
-          setActiveOrderForTracking(order);
-        }}
+        currentLocation={deliveryLocation}
+        onOrderPlaced={() => {}}
       />
 
       {/* Auth Modal (JWT + Google) */}
@@ -280,24 +306,23 @@ export default function App() {
         onClose={() => setIsAuthOpen(false)}
         onAuthSuccess={(user) => {
           setCurrentUser(user);
+          if (user.role === 'admin' || user.role === 'super_admin') setViewMode('dashboard');
         }}
       />
 
       {/* Delivery Location Selector Modal */}
       <LocationModal
         isOpen={isLocationOpen}
-        onClose={() => setIsLocationOpen(false)}
+        onClose={() => {
+          if (deliveryLocation) setIsLocationOpen(false);
+        }}
         currentLocation={deliveryLocation}
-        onSelectLocation={setDeliveryLocation}
+        onSelectLocation={(location) => {
+          setDeliveryLocation(location);
+          setIsLocationOpen(false);
+        }}
       />
 
-      {/* Live Order Tracker Modal */}
-      {activeOrderForTracking && (
-        <OrderTrackingModal
-          order={activeOrderForTracking}
-          onClose={() => setActiveOrderForTracking(null)}
-        />
-      )}
     </div>
   );
 }

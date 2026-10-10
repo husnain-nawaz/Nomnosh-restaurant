@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   TrendingUp, ShoppingCart, Clock, CheckCircle, Plus, Edit2, Trash2,
-  Database, RefreshCw, Terminal, Eye, Play, AlertCircle, ArrowLeft
+  Database, RefreshCw, Terminal, Eye, Play, AlertCircle, ArrowLeft, MapPin, Search
 } from 'lucide-react';
 
 export default function Dashboard({ onReturnToStore, currentUser }) {
-  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'menu' | 'mysql'
+  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'menu' | 'locations' | 'mysql'
   const [stats, setStats] = useState(null);
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
@@ -29,6 +29,25 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
   const [sqlResult, setSqlResult] = useState(null);
   const [sqlLoading, setSqlLoading] = useState(false);
   const [mysqlSchemas, setMysqlSchemas] = useState([]);
+  const [locationQuery, setLocationQuery] = useState('');
+  const [locationResults, setLocationResults] = useState([]);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState('');
+
+  const searchLocations = async (event) => {
+    event.preventDefault();
+    const query = locationQuery.trim();
+    if (query.length < 2) { setLocationResults([]); setLocationError('Enter at least 2 characters.'); return; }
+    setLocationLoading(true); setLocationError('');
+    try {
+      const response = await fetch(`/api/geocode/search?q=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Location search failed');
+      setLocationResults(Array.isArray(data.results) ? data.results : []);
+      if (!data.results?.length) setLocationError('No matching Punjab locations found.');
+    } catch (error) { setLocationResults([]); setLocationError(error.message); }
+    finally { setLocationLoading(false); }
+  };
 
   // Fetch initial dashboard data
   const fetchData = async () => {
@@ -181,6 +200,12 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Store</span>
             </button>
+            <button
+              onClick={() => setActiveTab('locations')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'locations' ? 'bg-amber-600 text-white shadow-xs' : 'bg-white text-stone-600 hover:bg-stone-200'}`}
+            >
+              <MapPin className="w-3.5 h-3.5" /> Locations
+            </button>
             <div className="h-5 w-px bg-stone-800" />
             <h1 className="text-base font-extrabold tracking-tight font-['Syne',sans-serif]">
               NOM <span className="text-amber-400">NOSH</span> RESTAURANT DASHBOARD
@@ -323,6 +348,7 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
                   <tr className="border-b border-stone-200 bg-stone-100/80 text-stone-600 font-bold uppercase tracking-wider">
                     <th className="p-3.5">Order ID</th>
                     <th className="p-3.5">Customer & Phone</th>
+                    <th className="p-3.5">Delivery Location</th>
                     <th className="p-3.5">Items Ordered</th>
                     <th className="p-3.5">Total (PKR)</th>
                     <th className="p-3.5">Payment</th>
@@ -339,6 +365,10 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
                       <td className="p-3.5">
                         <div className="font-bold text-stone-900">{order.customer_name}</div>
                         <div className="text-stone-500 font-mono text-[11px]">{order.customer_phone}</div>
+                      </td>
+                      <td className="p-3.5 max-w-xs">
+                        <div className="line-clamp-2 text-stone-700">{order.delivery_address || 'Takeaway'}</div>
+                        {Number.isFinite(Number(order.latitude)) && Number.isFinite(Number(order.longitude)) && <div className="mt-1 font-mono text-[10px] text-amber-700">{order.latitude}, {order.longitude}</div>}
                       </td>
                       <td className="p-3.5 max-w-xs">
                         <div className="line-clamp-2 text-stone-700">
@@ -469,6 +499,23 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'locations' && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-2xs">
+              <h2 className="flex items-center gap-2 text-lg font-black text-stone-900"><MapPin className="h-5 w-5 text-amber-600" />Location Search</h2>
+              <p className="mt-1 text-xs text-stone-500">Search addresses, colonies, blocks, streets, and landmarks in Lahore, Sahiwal, and Punjab, Pakistan.</p>
+              <form onSubmit={searchLocations} className="mt-4 flex gap-2">
+                <input value={locationQuery} onChange={event => setLocationQuery(event.target.value)} placeholder="e.g. Tariq Bin Ziad Colony Sahiwal" className="min-w-0 flex-1 rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" />
+                <button type="submit" disabled={locationLoading} className="flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-60"><Search className="h-4 w-4" />{locationLoading ? 'Searching…' : 'Search'}</button>
+              </form>
+              {locationError && <p className="mt-3 text-xs text-rose-700">{locationError}</p>}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {locationResults.map(place => <div key={place.placeId} className="rounded-2xl border border-stone-200 bg-white p-4 shadow-2xs"><p className="font-bold text-stone-900">{place.placeName}</p><p className="mt-1 text-xs text-stone-600">{place.formattedAddress}</p><p className="mt-2 text-[11px] text-stone-500">{place.latitude}, {place.longitude} · {place.deliveryAvailable === false ? 'Outside delivery area' : 'Delivery available'}</p></div>)}
             </div>
           </div>
         )}
@@ -635,6 +682,9 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
             <div className="space-y-2 text-xs text-stone-700">
               <p><strong>Customer:</strong> {selectedOrder.customer_name} ({selectedOrder.customer_phone})</p>
               <p><strong>Address:</strong> {selectedOrder.delivery_address}</p>
+              <p><strong>Coordinates:</strong> {selectedOrder.latitude != null && selectedOrder.longitude != null ? `${selectedOrder.latitude}, ${selectedOrder.longitude}` : 'Not recorded for this order'}</p>
+              {selectedOrder.location_source === 'current' && <p><strong>Location source:</strong> Browser current location</p>}
+              {selectedOrder.location_city && <p><strong>Location:</strong> {[selectedOrder.location_city, selectedOrder.location_state, selectedOrder.location_country, selectedOrder.postal_code].filter(Boolean).join(', ')}</p>}
               <p><strong>Type:</strong> <span className="capitalize">{selectedOrder.order_type}</span></p>
               <p><strong>Payment:</strong> <span className="uppercase">{selectedOrder.payment_method}</span></p>
               <p><strong>Notes:</strong> {selectedOrder.notes || 'None'}</p>

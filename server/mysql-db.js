@@ -16,6 +16,18 @@ if (!fs.existsSync(dataDir)) {
 const INITIAL_DB = {
   users: [
     {
+      id: 0,
+      name: "Super Admin",
+      email: "admin",
+      password_hash: "admin",
+      role: "super_admin",
+      google_id: null,
+      avatar_url: "https://api.dicebear.com/7.x/bottts/svg?seed=super-admin",
+      phone: "",
+      address: "",
+      created_at: new Date().toISOString()
+    },
+    {
       id: 1,
       name: "Store Manager",
       email: "admin@nomnoshpizza.com",
@@ -766,7 +778,13 @@ class MySqlEngine {
     try {
       if (fs.existsSync(DATA_FILE)) {
         const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-        return JSON.parse(raw);
+        const data = JSON.parse(raw);
+        if (!data.users?.some(user => user.email?.toLowerCase() === 'admin')) {
+          data.users = data.users || [];
+          data.users.unshift({ id: 0, name: 'Super Admin', email: 'admin', password_hash: 'admin', role: 'super_admin', google_id: null, avatar_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=super-admin', phone: '', address: '', created_at: new Date().toISOString() });
+          this.saveDatabase(data);
+        }
+        return data;
       }
     } catch (err) {
       console.warn("Could not read db file, loading default seed:", err.message);
@@ -1104,6 +1122,13 @@ class MySqlEngine {
       customer_email: orderData.customer_email || "",
       customer_phone: orderData.customer_phone,
       delivery_address: orderData.delivery_address,
+      latitude: orderData.latitude == null ? null : Number(orderData.latitude),
+      longitude: orderData.longitude == null ? null : Number(orderData.longitude),
+      location_city: orderData.location_city || orderData.city || "",
+      location_state: orderData.location_state || "",
+      location_country: orderData.location_country || "",
+      postal_code: orderData.postal_code || "",
+      location_source: orderData.location_source || "selected",
       city: orderData.city || "Sahiwal",
       order_type: orderData.order_type || "delivery",
       items_json: orderData.items || [],

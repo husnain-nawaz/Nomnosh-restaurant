@@ -1,6 +1,18 @@
 {
   "users": [
     {
+      "id": 0,
+      "name": "Super Admin",
+      "email": "admin",
+      "password_hash": "admin",
+      "role": "super_admin",
+      "google_id": null,
+      "avatar_url": "https://api.dicebear.com/7.x/bottts/svg?seed=super-admin",
+      "phone": "",
+      "address": "",
+      "created_at": "2026-10-10T00:00:00.000Z"
+    },
+    {
       "id": 1,
       "name": "Store Manager",
       "email": "admin@nomnoshpizza.com",
@@ -828,6 +840,508 @@
     }
   ],
   "orders": [
+    {
+      "id": "NN-2958",
+      "user_id": null,
+      "customer_name": "a",
+      "customer_email": "",
+      "customer_phone": "+92 300 1234567",
+      "delivery_address": "Sahiwal, Sahiwal Tehsil, Sahiwal District, Sahiwal Division, Punjab, Pakistan",
+      "latitude": 30.6715098,
+      "longitude": 73.1110572,
+      "location_city": "Sahiwal",
+      "location_state": "Punjab",
+      "location_country": "Pakistan",
+      "postal_code": "",
+      "location_source": "selected",
+      "city": "Sahiwal",
+      "order_type": "delivery",
+      "items_json": [
+        {
+          "id": 103,
+          "name": "Super Max Deal",
+          "basePrice": 1499,
+          "unitPrice": 1639,
+          "totalPrice": 1639,
+          "quantity": 1,
+          "image_url": "/src/assets/images/banner_delivery_deals_1791465662921.jpg",
+          "selectedSize": "Standard Deal",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [
+            "Signature Garlic Mayo Dip",
+            "Pickled Jalapeños"
+          ],
+          "specialInstructions": ""
+        }
+      ],
+      "subtotal": 1639,
+      "delivery_fee": 100,
+      "discount": 0,
+      "total_amount": 1739,
+      "payment_method": "cash_on_delivery",
+      "status": "pending",
+      "notes": "",
+      "created_at": "2026-10-10 18:16:48"
+    },
+    {
+      "id": "NN-5811",
+      "user_id": null,
+      "customer_name": "s",
+      "customer_email": "",
+      "customer_phone": "+92 300 1234567",
+      "delivery_address": "Sahiwal, Sahiwal Tehsil, Sahiwal District, Sahiwal Division, Punjab, Pakistan",
+      "latitude": 30.6715098,
+      "longitude": 73.1110572,
+      "location_city": "Sahiwal",
+      "location_state": "Punjab",
+      "location_country": "Pakistan",
+      "postal_code": "",
+      "location_source": "selected",
+      "city": "Sahiwal",
+      "order_type": "delivery",
+      "items_json": [
+        {
+          "id": 201,
+          "name": "Mega Nosh Deal",
+          "basePrice": 2680,
+          "unitPrice": 2680,
+          "totalPrice": 2680,
+          "quantity": 1,
+          "image_url": "/src/assets/images/banner_chef_special_pizza_1791465684202.jpg",
+          "selectedSize": "1 Large Pizza + 4 Broast + 1.5L",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [],
+          "specialInstructions": ""
+        }
+      ],
+      "subtotal": 2680,
+      "delivery_fee": 100,
+      "discount": 0,
+      "total_amount": 2780,
+      "payment_method": "cash_on_delivery",
+      "status": "pending",
+      "notes": "",
+      "created_at": "2026-10-10 18:16:32"
+    },
+    {
+      "id": "NN-6752",
+      "user_id": null,
+      "customer_name": "n",
+      "customer_email": "",
+      "customer_phone": "+92 300 1234567",
+      "delivery_address": "Sahiwal, Sahiwal Tehsil, Sahiwal District, Sahiwal Division, Punjab, Pakistan",
+      "latitude": 30.6715098,
+      "longitude": 73.1110572,
+      "location_city": "Sahiwal",
+      "location_state": "Punjab",
+      "location_country": "Pakistan",
+      "postal_code": "",
+      "location_source": "selected",
+      "city": "Sahiwal",
+      "order_type": "delivery",
+      "items_json": [
+        {
+          "id": 201,
+          "name": "Mega Nosh Deal",
+          "basePrice": 2680,
+          "unitPrice": 2780,
+          "totalPrice": 2780,
+          "quantity": 1,
+          "image_url": "/src/assets/images/banner_chef_special_pizza_1791465684202.jpg",
+          "selectedSize": "1 Large Pizza + 4 Broast + 1.5L",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [
+            "Fresh Sliced Mushrooms"
+          ],
+          "specialInstructions": ""
+        }
+      ],
+      "subtotal": 2780,
+      "delivery_fee": 100,
+      "discount": 0,
+      "total_amount": 2880,
+      "payment_method": "cash_on_delivery",
+      "status": "pending",
+      "notes": "",
+      "created_at": "2026-10-10 18:15:23"
+    },
+    {
+      "id": "NN-5468",
+      "user_id": null,
+      "customer_name": "jh",
+      "customer_email": "",
+      "customer_phone": "+92 300 1234567",
+      "delivery_address": "Sahiwal, Sahiwal Tehsil, Sahiwal District, Sahiwal Division, Punjab, Pakistan",
+      "latitude": 30.6715098,
+      "longitude": 73.1110572,
+      "location_city": "Sahiwal",
+      "location_state": "Punjab",
+      "location_country": "Pakistan",
+      "postal_code": "",
+      "location_source": "selected",
+      "city": "Sahiwal",
+      "order_type": "delivery",
+      "items_json": [
+        {
+          "id": 102,
+          "name": "Hunger Buster Deal",
+          "basePrice": 2699,
+          "unitPrice": 2699,
+          "totalPrice": 2699,
+          "quantity": 1,
+          "image_url": "/src/assets/images/hero_midnight_pizza_1791465648676.jpg",
+          "selectedSize": "Standard Deal",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [],
+          "specialInstructions": ""
+        }
+      ],
+      "subtotal": 2699,
+      "delivery_fee": 100,
+      "discount": 0,
+      "total_amount": 2799,
+      "payment_method": "cash_on_delivery",
+      "status": "pending",
+      "notes": "",
+      "created_at": "2026-10-10 18:15:13"
+    },
+    {
+      "id": "NN-4698",
+      "user_id": null,
+      "customer_name": "jh",
+      "customer_email": "",
+      "customer_phone": "+92 300 1234567",
+      "delivery_address": "Sahiwal, Sahiwal Tehsil, Sahiwal District, Sahiwal Division, Punjab, Pakistan",
+      "latitude": 30.6715098,
+      "longitude": 73.1110572,
+      "location_city": "Sahiwal",
+      "location_state": "Punjab",
+      "location_country": "Pakistan",
+      "postal_code": "",
+      "location_source": "selected",
+      "city": "Sahiwal",
+      "order_type": "delivery",
+      "items_json": [
+        {
+          "id": 102,
+          "name": "Hunger Buster Deal",
+          "basePrice": 2699,
+          "unitPrice": 2759,
+          "totalPrice": 2759,
+          "quantity": 1,
+          "image_url": "/src/assets/images/hero_midnight_pizza_1791465648676.jpg",
+          "selectedSize": "Standard Deal",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [
+            "Signature Garlic Mayo Dip"
+          ],
+          "specialInstructions": ""
+        }
+      ],
+      "subtotal": 2759,
+      "delivery_fee": 100,
+      "discount": 0,
+      "total_amount": 2859,
+      "payment_method": "cash_on_delivery",
+      "status": "pending",
+      "notes": "",
+      "created_at": "2026-10-10 18:14:41"
+    },
+    {
+      "id": "NN-4031",
+      "user_id": null,
+      "customer_name": "iuyfdx",
+      "customer_email": "",
+      "customer_phone": "+92 300 1234567",
+      "delivery_address": "Lahore, Punjab, Pakistan",
+      "latitude": 31.453278353984583,
+      "longitude": 74.30707508819461,
+      "location_city": "Sahiwal",
+      "location_state": "",
+      "location_country": "",
+      "postal_code": "",
+      "location_source": "current",
+      "city": "Sahiwal",
+      "order_type": "delivery",
+      "items_json": [
+        {
+          "id": 103,
+          "name": "Super Max Deal",
+          "basePrice": 1499,
+          "unitPrice": 1559,
+          "totalPrice": 1559,
+          "quantity": 1,
+          "image_url": "/src/assets/images/banner_delivery_deals_1791465662921.jpg",
+          "selectedSize": "Standard Deal",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [
+            "Signature Garlic Mayo Dip"
+          ],
+          "specialInstructions": ""
+        }
+      ],
+      "subtotal": 1559,
+      "delivery_fee": 100,
+      "discount": 0,
+      "total_amount": 1659,
+      "payment_method": "cash_on_delivery",
+      "status": "pending",
+      "notes": "",
+      "created_at": "2026-10-10 18:13:29"
+    },
+    {
+      "id": "NN-5735",
+      "user_id": null,
+      "customer_name": "f",
+      "customer_email": "",
+      "customer_phone": "+92 300 1234567",
+      "delivery_address": "Lahore, Punjab, Pakistan",
+      "city": "Sahiwal",
+      "order_type": "delivery",
+      "items_json": [
+        {
+          "id": 101,
+          "name": "NOM NOM Combo",
+          "basePrice": 1449,
+          "unitPrice": 1449,
+          "totalPrice": 1449,
+          "quantity": 1,
+          "image_url": "/src/assets/images/banner_delivery_deals_1791465662921.jpg",
+          "selectedSize": "Standard Deal",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [],
+          "specialInstructions": ""
+        }
+      ],
+      "subtotal": 1449,
+      "delivery_fee": 100,
+      "discount": 0,
+      "total_amount": 1549,
+      "payment_method": "cash_on_delivery",
+      "status": "pending",
+      "notes": "",
+      "created_at": "2026-10-10 18:10:46"
+    },
+    {
+      "id": "NN-3338",
+      "user_id": null,
+      "customer_name": "vv",
+      "customer_email": "",
+      "customer_phone": "+92 300 1234567",
+      "delivery_address": "Lahore, Punjab, Pakistan",
+      "city": "Sahiwal",
+      "order_type": "delivery",
+      "items_json": [
+        {
+          "id": 102,
+          "name": "Hunger Buster Deal",
+          "basePrice": 2699,
+          "unitPrice": 2909,
+          "totalPrice": 2909,
+          "quantity": 1,
+          "image_url": "/src/assets/images/hero_midnight_pizza_1791465648676.jpg",
+          "selectedSize": "Standard Deal",
+          "selectedCrust": null,
+          "selectedSpice": "Mild",
+          "selectedAddons": [
+            "Extra Mozzarella Cheese",
+            "Signature Garlic Mayo Dip"
+          ],
+          "specialInstructions": ""
+        }
+      ],
+      "subtotal": 2909,
+      "delivery_fee": 100,
+      "discount": 0,
+      "total_amount": 3009,
+      "payment_method": "cash_on_delivery",
+      "status": "pending",
+      "notes": "",
+      "created_at": "2026-10-10 18:08:38"
+    },
+    {
+      "id": "NN-1652",
+      "user_id": null,
+      "customer_name": "d",
+      "customer_email": "",
+      "customer_phone": "+92 300 1234567",
+      "delivery_address": "Sahiwal, Sahiwal Tehsil, Sahiwal District, Sahiwal Division, Punjab, Pakistan",
+      "city": "Sahiwal",
+      "order_type": "delivery",
+      "items_json": [
+        {
+          "id": 103,
+          "name": "Super Max Deal",
+          "basePrice": 1499,
+          "unitPrice": 1499,
+          "totalPrice": 1499,
+          "quantity": 1,
+          "image_url": "/src/assets/images/banner_delivery_deals_1791465662921.jpg",
+          "selectedSize": "Standard Deal",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [],
+          "specialInstructions": ""
+        },
+        {
+          "id": 103,
+          "name": "Super Max Deal",
+          "basePrice": 1499,
+          "unitPrice": 1559,
+          "totalPrice": 1559,
+          "quantity": 3,
+          "image_url": "/src/assets/images/banner_delivery_deals_1791465662921.jpg",
+          "selectedSize": "Standard Deal",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [
+            "Signature Garlic Mayo Dip"
+          ],
+          "specialInstructions": ""
+        },
+        {
+          "id": 103,
+          "name": "Super Max Deal",
+          "basePrice": 1499,
+          "unitPrice": 1579,
+          "totalPrice": 1579,
+          "quantity": 1,
+          "image_url": "/src/assets/images/banner_delivery_deals_1791465662921.jpg",
+          "selectedSize": "Standard Deal",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [
+            "Pickled Jalapeños"
+          ],
+          "specialInstructions": ""
+        }
+      ],
+      "subtotal": 7755,
+      "delivery_fee": 100,
+      "discount": 0,
+      "total_amount": 7855,
+      "payment_method": "cash_on_delivery",
+      "status": "pending",
+      "notes": "",
+      "created_at": "2026-10-10 18:06:46"
+    },
+    {
+      "id": "NN-5088",
+      "user_id": null,
+      "customer_name": "ds",
+      "customer_email": "",
+      "customer_phone": "+92 300 1234567",
+      "delivery_address": "ds",
+      "city": "Sahiwal",
+      "order_type": "delivery",
+      "items_json": [
+        {
+          "id": 103,
+          "name": "Super Max Deal",
+          "basePrice": 1499,
+          "unitPrice": 1789,
+          "totalPrice": 7156,
+          "quantity": 4,
+          "image_url": "/src/assets/images/banner_delivery_deals_1791465662921.jpg",
+          "selectedSize": "Standard Deal",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [
+            "Signature Garlic Mayo Dip",
+            "Extra Mozzarella Cheese",
+            "Pickled Jalapeños"
+          ],
+          "specialInstructions": ""
+        }
+      ],
+      "subtotal": 7156,
+      "delivery_fee": 100,
+      "discount": 0,
+      "total_amount": 7256,
+      "payment_method": "cash_on_delivery",
+      "status": "pending",
+      "notes": "ds",
+      "created_at": "2026-10-10 17:59:30"
+    },
+    {
+      "id": "NN-9711",
+      "user_id": null,
+      "customer_name": "demo",
+      "customer_email": "",
+      "customer_phone": "+92 300 1234567",
+      "delivery_address": "demo",
+      "city": "Sahiwal",
+      "order_type": "delivery",
+      "items_json": [
+        {
+          "id": 102,
+          "name": "Hunger Buster Deal",
+          "basePrice": 2699,
+          "unitPrice": 2799,
+          "totalPrice": 2799,
+          "quantity": 1,
+          "image_url": "/src/assets/images/hero_midnight_pizza_1791465648676.jpg",
+          "selectedSize": "Standard Deal",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [
+            "Fresh Sliced Mushrooms"
+          ],
+          "specialInstructions": ""
+        }
+      ],
+      "subtotal": 2799,
+      "delivery_fee": 100,
+      "discount": 0,
+      "total_amount": 2899,
+      "payment_method": "cash_on_delivery",
+      "status": "pending",
+      "notes": "ds",
+      "created_at": "2026-10-10 17:58:48"
+    },
+    {
+      "id": "NN-2466",
+      "user_id": null,
+      "customer_name": "sd",
+      "customer_email": "",
+      "customer_phone": "+92 300 1234567",
+      "delivery_address": "Takeaway from store",
+      "city": "Sahiwal",
+      "order_type": "takeaway",
+      "items_json": [
+        {
+          "id": 201,
+          "name": "Mega Nosh Deal",
+          "basePrice": 2680,
+          "unitPrice": 2780,
+          "totalPrice": 2780,
+          "quantity": 1,
+          "image_url": "/src/assets/images/banner_chef_special_pizza_1791465684202.jpg",
+          "selectedSize": "1 Large Pizza + 4 Broast + 1.5L",
+          "selectedCrust": null,
+          "selectedSpice": "Normal",
+          "selectedAddons": [
+            "Fresh Sliced Mushrooms"
+          ],
+          "specialInstructions": ""
+        }
+      ],
+      "subtotal": 2780,
+      "delivery_fee": 0,
+      "discount": 0,
+      "total_amount": 2780,
+      "payment_method": "cash_on_delivery",
+      "status": "pending",
+      "notes": "",
+      "created_at": "2026-10-09 01:48:10"
+    },
     {
       "id": "NN-7817",
       "user_id": 3,

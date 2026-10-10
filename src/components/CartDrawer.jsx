@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Trash2, ShoppingBag, Plus, Minus, Tag, Check, Truck, Store, ArrowRight, Loader2 } from 'lucide-react';
 
 export default function CartDrawer({
@@ -9,6 +9,7 @@ export default function CartDrawer({
   onRemoveItem,
   onClearCart,
   currentUser,
+  currentLocation,
   onOrderPlaced
 }) {
   if (!isOpen) return null;
@@ -26,6 +27,10 @@ export default function CartDrawer({
   const [deliveryAddress, setDeliveryAddress] = useState(currentUser?.address || '');
   const [paymentMethod, setPaymentMethod] = useState('cash_on_delivery');
   const [orderNotes, setOrderNotes] = useState('');
+
+  useEffect(() => {
+    if (currentLocation?.address || currentLocation?.formattedAddress) setDeliveryAddress(currentLocation.address || currentLocation.formattedAddress);
+  }, [currentLocation]);
 
   // Financial calculations
   const subtotal = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
@@ -59,6 +64,10 @@ export default function CartDrawer({
       setErrorMsg('Please complete all required contact and delivery fields');
       return;
     }
+    if (orderType === 'delivery' && (!Number.isFinite(Number(currentLocation?.latitude)) || !Number.isFinite(Number(currentLocation?.longitude)))) {
+      setErrorMsg('Please select and confirm your delivery location before ordering.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -73,7 +82,14 @@ export default function CartDrawer({
           customer_phone: customerPhone,
           customer_email: currentUser?.email || '',
           delivery_address: orderType === 'delivery' ? deliveryAddress : 'Takeaway from store',
-          city: 'Sahiwal',
+          latitude: orderType === 'delivery' ? currentLocation.latitude : null,
+          longitude: orderType === 'delivery' ? currentLocation.longitude : null,
+          location_city: orderType === 'delivery' ? currentLocation.city : null,
+          location_state: orderType === 'delivery' ? currentLocation.stateOrProvince : null,
+          location_country: orderType === 'delivery' ? currentLocation.country : null,
+          postal_code: orderType === 'delivery' ? currentLocation.postalCode : null,
+          location_source: orderType === 'delivery' ? (currentLocation.locationSource || 'selected') : null,
+          city: orderType === 'delivery' ? (currentLocation.city || 'Sahiwal') : 'Sahiwal',
           order_type: orderType,
           items: cart,
           subtotal,

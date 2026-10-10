@@ -18,6 +18,8 @@ const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 const STORE_LATITUDE = Number(process.env.STORE_LATITUDE);
 const STORE_LONGITUDE = Number(process.env.STORE_LONGITUDE);
 const GEOCODER_USER_AGENT = process.env.GEOCODER_USER_AGENT || 'NomNoshDelivery/1.0';
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+const LOCATION_SCOPE = 'Punjab, Pakistan';
 
 const app = express();
 app.use(cors());
@@ -42,6 +44,7 @@ function setSessionCookie(res, user) {
 function publicUser(user) {
   return { id: user.id, name: user.name, email: user.email, role: user.role, avatar_url: user.avatar_url, phone: user.phone, address: user.address };
 }
+const isAdminRole = (role) => role === 'admin' || role === 'super_admin';
 
 // JWT Authentication Middleware
 function authenticateToken(req, res, next) {
@@ -98,12 +101,13 @@ app.post('/api/auth/register', (req, res) => {
 
 // Email/Password Login
 app.post('/api/auth/login', (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+  const { email, username, password } = req.body;
+  const identifier = String(username || email || '').trim();
+  if (!identifier || !password) {
+    return res.status(400).json({ error: 'Username/email and password are required' });
   }
 
-  const user = db.getUserByEmail(email);
+  const user = db.getUserByEmail(identifier);
   if (!user || user.password_hash !== password) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
@@ -161,6 +165,12 @@ function distanceInKm(lat1, lon1, lat2, lon2) {
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function deliveryInfo(latitude, longitude) {
+  if (!Number.isFinite(STORE_LATITUDE) || !Number.isFinite(STORE_LONGITUDE)) return { deliveryAvailable: null, etaMinutes: null, distanceKm: null };
+  const distanceKm = distanceInKm(STORE_LATITUDE, STORE_LONGITUDE, latitude, longitude);
+  return { deliveryAvailable: distanceKm <= Number(process.env.DELIVERY_RADIUS_KM || 15), etaMinutes: Math.max(25, Math.round(25 + distanceKm * 3)), distanceKm: Number(distanceKm.toFixed(2)) };
+}
+
 async function reverseGeocode(latitude, longitude) {
   const lat = Number(latitude);
   const lng = Number(longitude);
@@ -169,31 +179,118 @@ async function reverseGeocode(latitude, longitude) {
     error.statusCode = 400;
     throw error;
   }
-  const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`, {
-    headers: { 'User-Agent': GEOCODER_USER_AGENT, Accept: 'application/json' },
-    signal: AbortSignal.timeout(10000)
-  });
-  if (!response.ok) throw new Error('Address service unavailable');
+  try {
+    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`, {
+      headers: { 'User-Agent': GEOCODER_USER_AGENT, Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.display_name) return normalizePlace(data, lat, lng);
+    }
+  } catch {}
+
+  try {
+    const fallback = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lng)}&localityLanguage=en`, { signal: AbortSignal.timeout(10000) });
+  if (!fallback.ok) throw new Error('Address service unavailable');
+  const data = await fallback.json();
+  const parts = [data.locality, data.city, data.principalSubdivision, data.countryName].filter(Boolean);
+  if (!parts.length) throw new Error('Address not found');
+  return { formattedAddress: parts.join(', '), address: parts.join(', '), latitude: lat, longitude: lng, city: data.city || data.locality || '', stateOrProvince: data.principalSubdivision || '', country: data.countryName || '', postalCode: data.postcode || '', addressComponents: data.localityInfo || {} };
+  } catch {
+    if (lat >= 31.2 && lat <= 31.7 && lng >= 74.0 && lng <= 74.7) return { address: 'Lahore, Punjab, Pakistan', latitude: lat, longitude: lng };
+    throw new Error('Address service unavailable');
+  }
+}
+
+function normalizePlace(item, latitude = Number(item.lat), longitude = Number(item.lon)) {
+  const address = item.address || {};
+  const city = address.city || address.town || address.village || address.municipality || address.county || '';
+  return {
+    formattedAddress: item.display_name || item.address || '', address: item.display_name || item.address || '',
+    placeName: item.name || (item.display_name || '').split(',')[0], latitude, longitude,
+    country: address.country || '', city, stateOrProvince: address.state || address.region || '', postalCode: address.postcode || '',
+    addressComponents: address, placeId: item.place_id ? `osm:${item.osm_type || 'place'}:${item.osm_id || item.place_id}` : `coordinates:${latitude},${longitude}`
+  };
+}
+
+async function googlePlacesSearch(query) {
+  if (!GOOGLE_MAPS_API_KEY) return [];
+  const response = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(`${query}, ${LOCATION_SCOPE}`)}&language=en&region=pk&key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`, { signal: AbortSignal.timeout(8000) });
+  if (!response.ok) throw new Error('Google Places search failed');
   const data = await response.json();
-  if (!data?.display_name) throw new Error('Address not found');
-  return { address: data.display_name, latitude: lat, longitude: lng };
+  if (!['OK', 'ZERO_RESULTS'].includes(data.status)) throw new Error(data.error_message || 'Google Places search failed');
+  return (data.results || []).map((place) => ({
+    formattedAddress: place.formatted_address || place.name,
+    address: place.formatted_address || place.name,
+    placeName: place.name,
+    latitude: Number(place.geometry?.location?.lat), longitude: Number(place.geometry?.location?.lng),
+    city: '', stateOrProvince: '', country: '', postalCode: '', addressComponents: {},
+    placeId: `google:${place.place_id}`
+  })).filter(place => Number.isFinite(place.latitude) && Number.isFinite(place.longitude));
+}
+
+function allowedLocation(place) {
+  const text = `${place.formattedAddress || ''} ${place.address || ''} ${place.country || ''} ${place.stateOrProvince || ''}`.toLowerCase();
+  return text.includes('pakistan') && (text.includes('punjab') || text.includes('lahore') || text.includes('sahiwal'));
 }
 
 app.get('/api/geocode', async (req, res) => {
   try {
     const result = await reverseGeocode(req.query.lat, req.query.lng);
-    const distanceKm = Number.isFinite(STORE_LATITUDE) && Number.isFinite(STORE_LONGITUDE)
-      ? distanceInKm(STORE_LATITUDE, STORE_LONGITUDE, result.latitude, result.longitude)
-      : null;
     res.json({
       ...result,
-      deliveryAvailable: distanceKm === null ? null : distanceKm <= Number(process.env.DELIVERY_RADIUS_KM || 15),
-      etaMinutes: distanceKm === null ? null : Math.max(25, Math.round(25 + distanceKm * 3)),
-      distanceKm: distanceKm === null ? null : Number(distanceKm.toFixed(2))
+      ...deliveryInfo(result.latitude, result.longitude)
     });
   } catch (error) {
     res.status(error.statusCode || 502).json({ error: 'Unable to load the address' });
   }
+});
+
+app.get('/api/geocode/search', async (req, res) => {
+  const query = String(req.query.q || '').trim();
+  if (query.length < 2) return res.json({ results: [] });
+  let results = [];
+  let providerFailed = false;
+  try {
+    results = (await googlePlacesSearch(query)).filter(allowedLocation);
+  } catch { providerFailed = true; }
+  try {
+    if (results.length) return res.json({ results: results.map(result => ({ ...result, ...deliveryInfo(result.latitude, result.longitude) })) });
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=pk&viewbox=69.0,37.5,74.5,27.5&bounded=1&q=${encodeURIComponent(`${query}, ${LOCATION_SCOPE}`)}`, {
+      headers: { 'User-Agent': GEOCODER_USER_AGENT, Accept: 'application/json' }, signal: AbortSignal.timeout(8000)
+    });
+    if (response.ok) {
+      const raw = await response.json();
+      results = raw.map(item => normalizePlace(item)).filter(allowedLocation);
+    } else providerFailed = true;
+  } catch { providerFailed = true; }
+
+  if (!results.length) {
+    try {
+      const response = await fetch(`https://photon.komoot.io/api/?limit=6&q=${encodeURIComponent(`${query}, ${LOCATION_SCOPE}`)}`, {
+        headers: { 'User-Agent': GEOCODER_USER_AGENT, Accept: 'application/json' }, signal: AbortSignal.timeout(8000)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        results = (data.features || []).map((feature) => {
+          const props = feature.properties || {};
+          const [longitude, latitude] = feature.geometry.coordinates;
+          return {
+            formattedAddress: [props.name, props.street, props.housenumber, props.city || props.county, props.state, props.country, props.postcode].filter(Boolean).join(', '),
+            placeName: props.name || props.street || props.city || props.country || query,
+            latitude, longitude, city: props.city || props.county || '',
+            stateOrProvince: props.state || '', country: props.country || '', postalCode: props.postcode || '',
+            placeId: `photon:${props.osm_type || 'place'}:${props.osm_id || `${latitude},${longitude}`}`
+          };
+        }).filter(allowedLocation);
+      }
+    } catch { providerFailed = true; }
+  }
+
+  results = results.map(result => ({ ...result, ...deliveryInfo(result.latitude, result.longitude) }));
+  if (!results.length && providerFailed) return res.status(502).json({ error: 'The address search service is temporarily unavailable.' });
+  res.json({ results });
 });
 
 // Resolve browser coordinates (or a manually entered address) server-side.
@@ -203,30 +300,21 @@ app.post('/api/location/resolve', async (req, res) => {
   if (!hasCoordinates && !address?.trim()) return res.status(400).json({ error: 'Coordinates or an address is required' });
 
   try {
-    const query = hasCoordinates
-      ? `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`
-      : `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(address.trim())}`;
-    const geocodeResponse = await fetch(query, { headers: { 'User-Agent': GEOCODER_USER_AGENT, Accept: 'application/json' } });
-    if (!geocodeResponse.ok) throw new Error('Address service unavailable');
-    const raw = await geocodeResponse.json();
-    const result = Array.isArray(raw) ? raw[0] : raw;
-    if (!result?.lat || !result?.lon) return res.status(404).json({ error: 'Unable to find a readable address for that location' });
+    let result;
+    if (hasCoordinates) {
+      result = await reverseGeocode(latitude, longitude);
+    } else {
+      result = null;
+    }
+    if (!Number.isFinite(Number(result?.latitude)) || !Number.isFinite(Number(result?.longitude))) return res.status(404).json({ error: 'Unable to find a readable address for that location' });
 
-    const resolvedLatitude = Number(result.lat);
-    const resolvedLongitude = Number(result.lon);
-    const distanceKm = Number.isFinite(STORE_LATITUDE) && Number.isFinite(STORE_LONGITUDE)
-      ? distanceInKm(STORE_LATITUDE, STORE_LONGITUDE, resolvedLatitude, resolvedLongitude)
-      : null;
-    const deliveryAvailable = distanceKm === null ? null : distanceKm <= Number(process.env.DELIVERY_RADIUS_KM || 15);
-    const etaMinutes = distanceKm === null ? null : Math.max(25, Math.round(25 + distanceKm * 3));
-
+    const resolvedLatitude = Number(result.latitude);
+    const resolvedLongitude = Number(result.longitude);
     res.json({
-      address: result.display_name,
+      ...result, address: result.formattedAddress || result.address,
       latitude: resolvedLatitude,
       longitude: resolvedLongitude,
-      deliveryAvailable,
-      etaMinutes,
-      distanceKm: distanceKm === null ? null : Number(distanceKm.toFixed(2))
+      ...deliveryInfo(resolvedLatitude, resolvedLongitude)
     });
   } catch (error) {
     res.status(502).json({ error: error.message || 'Unable to resolve this location' });
@@ -256,7 +344,7 @@ app.get('/api/products', (req, res) => {
 
 // Add Menu Item (Admin)
 app.post('/api/products', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
+  if (!isAdminRole(req.user.role)) {
     return res.status(403).json({ error: 'Admin permission required' });
   }
   const item = db.addMenuItem(req.body);
@@ -265,7 +353,7 @@ app.post('/api/products', authenticateToken, (req, res) => {
 
 // Update Menu Item (Admin)
 app.put('/api/products/:id', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
+  if (!isAdminRole(req.user.role)) {
     return res.status(403).json({ error: 'Admin permission required' });
   }
   const updated = db.updateMenuItem(req.params.id, req.body);
@@ -275,7 +363,7 @@ app.put('/api/products/:id', authenticateToken, (req, res) => {
 
 // Delete Menu Item (Admin)
 app.delete('/api/products/:id', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
+  if (!isAdminRole(req.user.role)) {
     return res.status(403).json({ error: 'Admin permission required' });
   }
   const deleted = db.deleteMenuItem(req.params.id);
@@ -288,7 +376,7 @@ app.delete('/api/products/:id', authenticateToken, (req, res) => {
 // Get Orders
 app.get('/api/orders', optionalToken, (req, res) => {
   const allOrders = db.getOrders();
-  if (req.user && req.user.role === 'admin') {
+  if (req.user && isAdminRole(req.user.role)) {
     return res.json(allOrders);
   }
   if (req.user) {
@@ -307,6 +395,9 @@ app.post('/api/orders', optionalToken, (req, res) => {
   if (!orderData.items || orderData.items.length === 0) {
     return res.status(400).json({ error: 'Cart cannot be empty' });
   }
+  if (orderData.order_type === 'delivery' && (!Number.isFinite(Number(orderData.latitude)) || !Number.isFinite(Number(orderData.longitude)))) {
+    return res.status(400).json({ error: 'Please select and confirm a delivery location before ordering' });
+  }
 
   if (req.user) {
     orderData.user_id = req.user.id;
@@ -319,7 +410,7 @@ app.post('/api/orders', optionalToken, (req, res) => {
 
 // Update Order Status (Admin)
 app.put('/api/orders/:id/status', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
+  if (!isAdminRole(req.user.role)) {
     return res.status(403).json({ error: 'Admin permission required' });
   }
   const { status } = req.body;
@@ -331,7 +422,7 @@ app.put('/api/orders/:id/status', authenticateToken, (req, res) => {
 // ----------------- DASHBOARD ANALYTICS ----------------- //
 
 app.get('/api/stats', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
+  if (!isAdminRole(req.user.role)) {
     return res.status(403).json({ error: 'Admin permission required' });
   }
 
@@ -361,14 +452,14 @@ app.get('/api/stats', authenticateToken, (req, res) => {
 // ----------------- MYSQL CONSOLE & SCHEMA ROUTES ----------------- //
 
 app.get('/api/mysql/schema', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
+  if (!isAdminRole(req.user.role)) {
     return res.status(403).json({ error: 'Admin permission required' });
   }
   res.json(db.getSchema());
 });
 
 app.post('/api/mysql/query', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
+  if (!isAdminRole(req.user.role)) {
     return res.status(403).json({ error: 'Admin permission required' });
   }
   const { sql } = req.body;
@@ -378,7 +469,7 @@ app.post('/api/mysql/query', authenticateToken, (req, res) => {
 });
 
 app.post('/api/mysql/reset', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
+  if (!isAdminRole(req.user.role)) {
     return res.status(403).json({ error: 'Admin permission required' });
   }
   db.resetToDefault();

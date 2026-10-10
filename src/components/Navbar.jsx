@@ -70,7 +70,7 @@ export default function Navbar({
         {/* Right Action Zone */}
         <div className="flex items-center gap-3">
           {/* Switch Storefront <-> Dashboard */}
-          {currentUser?.role === 'admin' && (
+          {(currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
             <button
               onClick={() => setViewMode(viewMode === 'storefront' ? 'dashboard' : 'storefront')}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs ${
@@ -81,23 +81,6 @@ export default function Navbar({
             >
               <ShieldAlert className="w-4 h-4 text-amber-500" />
               <span>{viewMode === 'dashboard' ? 'Return to Store' : 'Admin Dashboard'}</span>
-            </button>
-          )}
-
-          {/* If not logged in as admin, small toggle to test Admin Dashboard */}
-          {(!currentUser || currentUser.role !== 'admin') && (
-            <button
-              onClick={() => {
-                if (currentUser?.role === 'admin') {
-                  setViewMode(viewMode === 'storefront' ? 'dashboard' : 'storefront');
-                } else {
-                  // Direct shortcut to preview Dashboard or sign in as Admin
-                  setViewMode(viewMode === 'storefront' ? 'dashboard' : 'storefront');
-                }
-              }}
-              className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-colors"
-            >
-              <span>{viewMode === 'dashboard' ? 'Store View' : 'Manager View'}</span>
             </button>
           )}
 
