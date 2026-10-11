@@ -14,6 +14,9 @@ if (!fs.existsSync(dataDir)) {
 
 // Initial seed data based exactly on NOM NOSH Pizza PDF
 const INITIAL_DB = {
+  locations: [
+    { id: 1, name: "Nom Nosh Sahiwal", address: "88-A, Main Fateh Sher Road, Sahiwal", city: "Sahiwal", phone: "+92 304 1118514", latitude: 30.6715098, longitude: 73.1110572, is_active: true, created_at: new Date().toISOString() }
+  ],
   users: [
     {
       id: 0,
@@ -779,6 +782,8 @@ class MySqlEngine {
       if (fs.existsSync(DATA_FILE)) {
         const raw = fs.readFileSync(DATA_FILE, 'utf-8');
         const data = JSON.parse(raw);
+        data.locations = data.locations || [];
+        for (const table of ['notifications','order_events','riders','inventory','coupons','refunds','audit_logs','payment_reconciliations','customer_profiles']) data[table] = data[table] || [];
         if (!data.users?.some(user => user.email?.toLowerCase() === 'admin')) {
           data.users = data.users || [];
           data.users.unshift({ id: 0, name: 'Super Admin', email: 'admin', password_hash: 'admin', role: 'super_admin', google_id: null, avatar_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=super-admin', phone: '', address: '', created_at: new Date().toISOString() });
@@ -1022,6 +1027,30 @@ class MySqlEngine {
 
   // Domain CRUD operations
   getUsers() { return this.db.users; }
+  getLocations() { return [...(this.db.locations || [])].sort((a, b) => a.id - b.id); }
+  addLocation(locationData) {
+    this.db.locations = this.db.locations || [];
+    const location = { id: Date.now(), name: locationData.name, address: locationData.address || '', city: locationData.city || '', phone: locationData.phone || '', latitude: Number(locationData.latitude), longitude: Number(locationData.longitude), is_active: locationData.is_active !== false, created_at: new Date().toISOString() };
+    this.db.locations.push(location); this.saveDatabase(); return location;
+  }
+
+  getCollection(table) { return [...(this.db[table] || [])]; }
+  insertCollection(table, row) {
+    this.db[table] = this.db[table] || [];
+    const item = { id: row.id || `${table.slice(0, 3).toUpperCase()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`, created_at: new Date().toISOString(), ...row };
+    this.db[table].unshift(item); this.saveDatabase(); return item;
+  }
+  updateCollection(table, id, updates) {
+    const item = (this.db[table] || []).find(row => String(row.id) === String(id));
+    if (!item) return null; Object.assign(item, updates, { updated_at: new Date().toISOString() }); this.saveDatabase(); return item;
+  }
+  updateLocation(id, updates) {
+    const index = (this.db.locations || []).findIndex(location => location.id === Number(id));
+    if (index === -1) return null;
+    this.db.locations[index] = { ...this.db.locations[index], ...updates, latitude: Number(updates.latitude ?? this.db.locations[index].latitude), longitude: Number(updates.longitude ?? this.db.locations[index].longitude) };
+    this.saveDatabase(); return this.db.locations[index];
+  }
+  deleteLocation(id) { const index = (this.db.locations || []).findIndex(location => location.id === Number(id)); if (index === -1) return false; this.db.locations.splice(index, 1); this.saveDatabase(); return true; }
   getUserByEmail(email) {
     return this.db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
   }
@@ -1043,12 +1072,15 @@ class MySqlEngine {
       avatar_url: userData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(userData.name)}`,
       phone: userData.phone || null,
       address: userData.address || null,
+      task: userData.task || '',
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
     this.db.users.push(newUser);
     this.saveDatabase();
     return newUser;
   }
+  getStaffUsers() { return this.db.users.filter(user => ['admin', 'staff'].includes(user.role)); }
+  updateUserTask(id, task) { const user = this.db.users.find(item => item.id === Number(id)); if (!user) return null; user.task = task || ''; this.saveDatabase(); return user; }
 
   getCategories() {
     return [...this.db.categories].sort((a, b) => a.sort_order - b.sort_order);
@@ -1078,6 +1110,7 @@ class MySqlEngine {
       price: Number(itemData.price),
       original_price: itemData.original_price ? Number(itemData.original_price) : null,
       image_url: itemData.image_url || "/src/assets/images/hero_midnight_pizza_1791465648676.jpg",
+      image_urls: Array.isArray(itemData.image_urls) ? itemData.image_urls.slice(0, 5) : (itemData.image_url ? [itemData.image_url] : []),
       is_available: itemData.is_available !== undefined ? Boolean(itemData.is_available) : true,
       is_deal: itemData.is_deal !== undefined ? Boolean(itemData.is_deal) : false,
       sizes_json: itemData.sizes_json || [],
@@ -1150,6 +1183,8 @@ class MySqlEngine {
     const order = this.db.orders.find(o => o.id === orderId);
     if (!order) return null;
     order.status = status;
+    this.db.order_events = this.db.order_events || [];
+    this.db.order_events.unshift({ id: `EV-${Date.now()}`, order_id: orderId, type: 'status_changed', status, created_at: new Date().toISOString() });
     this.saveDatabase();
     return order;
   }

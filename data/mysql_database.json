@@ -34,7 +34,9 @@
       "avatar_url": "https://api.dicebear.com/7.x/avataaars/svg?seed=Sale",
       "phone": "+92 300 1234567",
       "address": "House 14, Block C, Sahiwal Colony, Sahiwal",
-      "created_at": "2026-02-15 14:30:00"
+      "created_at": "2026-02-15 14:30:00",
+      "blocked": false,
+      "blocked_reason": ""
     },
     {
       "id": 3,
@@ -46,7 +48,9 @@
       "avatar_url": "https://api.dicebear.com/7.x/avataaars/svg?seed=GoogleUser",
       "phone": null,
       "address": null,
-      "created_at": "2026-10-08 14:44:56"
+      "created_at": "2026-10-08 14:44:56",
+      "blocked": true,
+      "blocked_reason": "Spam or policy violation"
     },
     {
       "id": 4,
@@ -59,6 +63,19 @@
       "phone": null,
       "address": null,
       "created_at": "2026-10-08 15:29:56"
+    },
+    {
+      "id": 5,
+      "name": "a",
+      "email": "a@a.com",
+      "password_hash": "a",
+      "role": "staff",
+      "google_id": null,
+      "avatar_url": "https://api.dicebear.com/7.x/avataaars/svg?seed=a",
+      "phone": null,
+      "address": null,
+      "task": "a1",
+      "created_at": "2026-10-11 18:09:33"
     }
   ],
   "categories": [
@@ -176,93 +193,6 @@
     }
   ],
   "menu_items": [
-    {
-      "id": 101,
-      "category_slug": "delivery-deals",
-      "name": "NOM NOM Combo",
-      "description": "2 Nom Max Burger, 2 Pcs Fried Chicken, and 500ml chilled drink. The ultimate duo combo.",
-      "price": 1449,
-      "original_price": 1750,
-      "image_url": "/src/assets/images/banner_delivery_deals_1791465662921.jpg",
-      "is_available": true,
-      "is_deal": true,
-      "sizes_json": [
-        "Standard Deal"
-      ],
-      "options_json": [
-        "Drink: Coke",
-        "Drink: Sprite",
-        "Drink: Next Cola"
-      ]
-    },
-    {
-      "id": 102,
-      "category_slug": "delivery-deals",
-      "name": "Hunger Buster Deal",
-      "description": "1 Chef Special Pizza (Medium), 1 Nom Max Burger, and 1 Liter Soft Drink. Perfect for 2-3 foodies.",
-      "price": 2699,
-      "original_price": 3100,
-      "image_url": "/src/assets/images/hero_midnight_pizza_1791465648676.jpg",
-      "is_available": true,
-      "is_deal": true,
-      "sizes_json": [
-        "Standard Deal"
-      ],
-      "options_json": [
-        "Pizza Flavor: Malai Boti",
-        "Pizza Flavor: Bistro",
-        "Pizza Flavor: Crown Crust"
-      ]
-    },
-    {
-      "id": 103,
-      "category_slug": "delivery-deals",
-      "name": "Super Max Deal",
-      "description": "2 Nom Max Burger, Chicken Strips (6 Pcs) with fresh fries & 500ml drink.",
-      "price": 1499,
-      "original_price": 1800,
-      "image_url": "/src/assets/images/banner_delivery_deals_1791465662921.jpg",
-      "is_available": true,
-      "is_deal": true,
-      "sizes_json": [
-        "Standard Deal"
-      ],
-      "options_json": [
-        "Drink: 500ml Next Cola",
-        "Drink: 500ml Sprite",
-        "Drink: 500ml Fanta"
-      ]
-    },
-    {
-      "id": 201,
-      "category_slug": "mega-nosh-deal",
-      "name": "Mega Nosh Deal",
-      "description": "1 Large Pizza, 4 Pcs Injected Broast, 1.5 Ltr Chilled Drink. The signature family feast.",
-      "price": 2680,
-      "original_price": 3200,
-      "image_url": "/src/assets/images/banner_chef_special_pizza_1791465684202.jpg",
-      "is_available": true,
-      "is_deal": true,
-      "sizes_json": [
-        "1 Large Pizza + 4 Broast + 1.5L"
-      ],
-      "options_json": [
-        "Flavor: Chicken Fajita",
-        "Flavor: Chicken Tikka",
-        "Flavor: Supreme"
-      ]
-    },
-    {
-      "id": 301,
-      "category_slug": "super-deals",
-      "name": "Deal 1",
-      "description": "1 Nom Max Burger, Regular Fries & Regular Soft Drink.",
-      "price": 700,
-      "original_price": 850,
-      "image_url": "/src/assets/images/banner_delivery_deals_1791465662921.jpg",
-      "is_available": true,
-      "is_deal": true
-    },
     {
       "id": 302,
       "category_slug": "super-deals",
@@ -837,6 +767,34 @@
         "Small 500ml (Rs. 60)",
         "Large 1.5L (Rs. 110)"
       ]
+    },
+    {
+      "id": 1791698326656,
+      "category_slug": "burgers",
+      "name": "srfd",
+      "description": "egfd",
+      "price": 3355,
+      "original_price": null,
+      "image_url": "/src/assets/images/hero_midnight_pizza_1791465648676.jpg",
+      "is_available": true,
+      "is_deal": true,
+      "sizes_json": [],
+      "options_json": [],
+      "created_at": "2026-10-11 05:58:46"
+    },
+    {
+      "id": 1791698365875,
+      "category_slug": "burgers",
+      "name": "gfd",
+      "description": "4",
+      "price": 444,
+      "original_price": null,
+      "image_url": "data:image/jpeg;base64,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",
+      "is_available": true,
+      "is_deal": true,
+      "sizes_json": [],
+      "options_json": [],
+      "created_at": "2026-10-11 05:59:25"
     }
   ],
   "orders": [
@@ -880,7 +838,7 @@
       "discount": 0,
       "total_amount": 1739,
       "payment_method": "cash_on_delivery",
-      "status": "pending",
+      "status": "delivered",
       "notes": "",
       "created_at": "2026-10-10 18:16:48"
     },
@@ -1506,5 +1464,100 @@
       "notes": "Please deliver warm",
       "created_at": "2026-10-08 06:14:00"
     }
-  ]
+  ],
+  "locations": [],
+  "notifications": [],
+  "order_events": [],
+  "riders": [],
+  "inventory": [],
+  "coupons": [],
+  "refunds": [],
+  "audit_logs": [
+    {
+      "id": "AUD-1791743770643-370",
+      "created_at": "2026-10-11T18:36:10.643Z",
+      "actor_id": 0,
+      "actor_name": "Super Admin",
+      "action": "unblocked",
+      "entity": "customer",
+      "entity_id": 2,
+      "details": {
+        "reason": ""
+      }
+    },
+    {
+      "id": "AUD-1791743767410-232",
+      "created_at": "2026-10-11T18:36:07.410Z",
+      "actor_id": 0,
+      "actor_name": "Super Admin",
+      "action": "blocked",
+      "entity": "customer",
+      "entity_id": 2,
+      "details": {
+        "reason": "Spam or policy violation"
+      }
+    },
+    {
+      "id": "AUD-1791743702568-433",
+      "created_at": "2026-10-11T18:35:02.568Z",
+      "actor_id": 0,
+      "actor_name": "Super Admin",
+      "action": "blocked",
+      "entity": "customer",
+      "entity_id": 3,
+      "details": {
+        "reason": "Spam or policy violation"
+      }
+    },
+    {
+      "id": "AUD-1791743129056-149",
+      "created_at": "2026-10-11T18:25:29.056Z",
+      "actor_id": 0,
+      "actor_name": "Super Admin",
+      "action": "unblocked",
+      "entity": "customer",
+      "entity_id": 2,
+      "details": {
+        "reason": ""
+      }
+    },
+    {
+      "id": "AUD-1791742976575-373",
+      "created_at": "2026-10-11T18:22:56.575Z",
+      "actor_id": 0,
+      "actor_name": "Super Admin",
+      "action": "blocked",
+      "entity": "customer",
+      "entity_id": 2,
+      "details": {
+        "reason": "Spam or policy violation"
+      }
+    },
+    {
+      "id": "AUD-1791742972750-246",
+      "created_at": "2026-10-11T18:22:52.750Z",
+      "actor_id": 0,
+      "actor_name": "Super Admin",
+      "action": "unblocked",
+      "entity": "customer",
+      "entity_id": 2,
+      "details": {
+        "reason": ""
+      }
+    },
+    {
+      "id": "AUD-1791742970842-677",
+      "created_at": "2026-10-11T18:22:50.842Z",
+      "actor_id": 0,
+      "actor_name": "Super Admin",
+      "action": "blocked",
+      "entity": "customer",
+      "entity_id": 2,
+      "details": {
+        "reason": "Spam or policy violation"
+      }
+    }
+  ],
+  "payment_reconciliations": [],
+  "customer_profiles": []
 }

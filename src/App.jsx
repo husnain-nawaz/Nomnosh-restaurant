@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar.jsx';
 import HeroBanner from './components/HeroBanner.jsx';
 import CategoryNav from './components/CategoryNav.jsx';
@@ -13,7 +13,8 @@ import Footer from './components/Footer.jsx';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [viewMode, setViewMode] = useState('storefront'); // 'storefront' | 'dashboard'
+  const [viewMode, setViewMode] = useState(() => sessionStorage.getItem('nomnosh_view_mode') || 'storefront'); // 'storefront' | 'dashboard'
+  const storefrontScrollY = useRef(Number(sessionStorage.getItem('nomnosh_storefront_scroll') || 0));
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [activeCategory, setActiveCategory] = useState('all');
@@ -146,6 +147,23 @@ export default function App() {
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
 
+  const handleViewModeChange = (nextMode) => {
+    if (viewMode === 'storefront' && nextMode === 'dashboard') storefrontScrollY.current = window.scrollY;
+    setViewMode(nextMode);
+    sessionStorage.setItem('nomnosh_view_mode', nextMode);
+  };
+
+  useEffect(() => {
+    sessionStorage.setItem('nomnosh_view_mode', viewMode);
+    if (viewMode === 'storefront') window.requestAnimationFrame(() => window.scrollTo({ top: storefrontScrollY.current, behavior: 'instant' }));
+  }, [viewMode]);
+
+  useEffect(() => {
+    const saveScroll = () => { if (viewMode === 'storefront') { storefrontScrollY.current = window.scrollY; sessionStorage.setItem('nomnosh_storefront_scroll', String(window.scrollY)); } };
+    window.addEventListener('scroll', saveScroll, { passive: true });
+    return () => window.removeEventListener('scroll', saveScroll);
+  }, [viewMode]);
+
   // Filter products by category and search
   const filteredProducts = products.filter(p => {
     if (searchQuery.trim()) {
@@ -171,14 +189,14 @@ export default function App() {
         currentLocation={deliveryLocation}
         onLogout={handleLogout}
         viewMode={viewMode}
-        setViewMode={setViewMode}
+        setViewMode={handleViewModeChange}
         deliveryLocation={deliveryLocation}
       />
 
       {/* Main View Mode: Storefront vs Admin Dashboard */}
       {viewMode === 'dashboard' ? (
         <Dashboard
-          onReturnToStore={() => setViewMode('storefront')}
+          onReturnToStore={() => handleViewModeChange('storefront')}
           currentUser={currentUser}
         />
       ) : (

@@ -39,11 +39,26 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
 
   useEffect(() => {
     if (!isOpen || !googleButtonRef.current) return;
-    const renderGoogleButton = () => {
+    let cancelled = false;
+    const renderGoogleButton = async () => {
       if (!window.google?.accounts?.id || !googleButtonRef.current) return;
+      let googleClientId;
+      try {
+        const configResponse = await fetch('/api/config');
+        const config = await configResponse.json();
+        googleClientId = config.googleClientId;
+      } catch {
+        if (!cancelled) setErrorMessage('Unable to load Google Sign-In configuration.');
+        return;
+      }
+      if (cancelled) return;
+      if (!googleClientId || googleClientId.includes('your-google-web-client-id')) {
+        setErrorMessage('Google Sign-In is not configured. Add a Google OAuth Web Client ID to the server .env file.');
+        return;
+      }
       googleButtonRef.current.innerHTML = '';
       window.google.accounts.id.initialize({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        client_id: googleClientId,
         callback: handleGoogleCredential,
         ux_mode: 'popup'
       });
@@ -61,6 +76,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       script.onerror = () => setErrorMessage('Unable to load Google Sign-In. Check your connection and try again.');
       document.head.appendChild(script);
     }
+    return () => { cancelled = true; };
   }, [isOpen]);
 
   const handleSubmit = async (e) => {

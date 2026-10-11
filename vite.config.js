@@ -21,7 +21,9 @@ export default defineConfig(() => {
         '/api': 'http://localhost:3000',
       },
       hmr: process.env.DISABLE_HMR !== 'true',
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      watch: process.env.DISABLE_HMR === 'true' ? null : {
+        ignored: ['**/data/mysql_database.json', '**/dev-server*.log', '**/location-test*.log']
+      },
     },
   };
 });

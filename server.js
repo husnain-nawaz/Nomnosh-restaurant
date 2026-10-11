@@ -23,8 +23,19 @@ const LOCATION_SCOPE = 'Punjab, Pakistan';
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Menu items may include one or more resized base64 images. Keep the request
+// limit high enough for the admin upload flow; the client still compresses
+// images before sending them.
+app.use(express.json({ limit: '100mb' }));
 app.use(cookieParser());
+
+app.get('/api/config', (_req, res) => {
+  res.json({ googleClientId: GOOGLE_CLIENT_ID || null });
+});
+
+app.get('/api/staff', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); res.json(db.getStaffUsers().map(user => ({ id: user.id, name: user.name, email: user.email, role: user.role, task: user.task || '' }))); });
+app.post('/api/staff', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const { name, email, password, role, task } = req.body; if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required' }); if (db.getUserByEmail(email)) return res.status(409).json({ error: 'User already exists' }); const user = db.createUser({ name, email, password_hash: password, role: role === 'staff' ? 'staff' : 'admin', task }); res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role, task: user.task }); });
+app.put('/api/staff/:id/task', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const user = db.updateUserTask(req.params.id, req.body.task); if (!user) return res.status(404).json({ error: 'User not found' }); res.json({ id: user.id, name: user.name, email: user.email, role: user.role, task: user.task }); });
 
 function setSessionCookie(res, user) {
   const token = jwt.sign(
@@ -42,7 +53,7 @@ function setSessionCookie(res, user) {
 }
 
 function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email, role: user.role, avatar_url: user.avatar_url, phone: user.phone, address: user.address };
+  return { id: user.id, name: user.name, email: user.email, role: user.role, avatar_url: user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`, phone: user.phone, address: user.address, blocked: Boolean(user.blocked), blocked_reason: user.blocked_reason || '' };
 }
 const isAdminRole = (role) => role === 'admin' || role === 'super_admin';
 
@@ -54,6 +65,9 @@ function authenticateToken(req, res, next) {
 
   jwt.verify(token, JWT_SECRET, (err, decoded) => {
     if (err) return res.status(403).json({ error: 'Invalid or expired token' });
+    const account = db.getUserById(decoded.id);
+    if (!account) return res.status(401).json({ error: 'Account no longer exists' });
+    if (account.blocked) return res.status(403).json({ error: `Account blocked${account.blocked_reason ? `: ${account.blocked_reason}` : ''}` });
     req.user = decoded;
     next();
   });
@@ -179,6 +193,7 @@ async function reverseGeocode(latitude, longitude) {
     error.statusCode = 400;
     throw error;
   }
+  if (user.blocked) return res.status(403).json({ error: `Account blocked${user.blocked_reason ? `: ${user.blocked_reason}` : ''}` });
   try {
     const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`, {
       headers: { 'User-Agent': GEOCODER_USER_AGENT, Accept: 'application/json' },
@@ -335,6 +350,25 @@ app.get('/api/categories', (req, res) => {
   res.json(db.getCategories());
 });
 
+app.get('/api/locations', authenticateToken, (req, res) => {
+  if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin permission required' });
+  res.json(db.getLocations());
+});
+app.post('/api/locations', authenticateToken, (req, res) => {
+  if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin permission required' });
+  const { name, latitude, longitude } = req.body;
+  if (!name || !Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) return res.status(400).json({ error: 'Name, latitude, and longitude are required' });
+  res.status(201).json(db.addLocation(req.body));
+});
+app.put('/api/locations/:id', authenticateToken, (req, res) => {
+  if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin permission required' });
+  const location = db.updateLocation(req.params.id, req.body); if (!location) return res.status(404).json({ error: 'Location not found' }); res.json(location);
+});
+app.delete('/api/locations/:id', authenticateToken, (req, res) => {
+  if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin permission required' });
+  if (!db.deleteLocation(req.params.id)) return res.status(404).json({ error: 'Location not found' }); res.json({ success: true });
+});
+
 // Menu Items (with category & search)
 app.get('/api/products', (req, res) => {
   const { category, search } = req.query;
@@ -405,6 +439,7 @@ app.post('/api/orders', optionalToken, (req, res) => {
   }
 
   const createdOrder = db.createOrder(orderData);
+  db.insertCollection('notifications', { type: 'new_order', title: 'New order received', message: `Order #${createdOrder.id} from ${createdOrder.customer_name}`, order_id: createdOrder.id, read_at: null });
   res.status(201).json(createdOrder);
 });
 
@@ -418,6 +453,39 @@ app.put('/api/orders/:id/status', authenticateToken, (req, res) => {
   if (!updated) return res.status(404).json({ error: 'Order not found' });
   res.json(updated);
 });
+
+// ----------------- OPERATIONS WORKSPACE ----------------- //
+const requireAdmin = (req, res, next) => isAdminRole(req.user.role) ? next() : res.status(403).json({ error: 'Admin permission required' });
+const audit = (req, action, entity, entity_id, details = {}) => db.insertCollection('audit_logs', { actor_id: req.user.id, actor_name: req.user.name, action, entity, entity_id, details });
+
+app.get('/api/orders/:id/detail', authenticateToken, requireAdmin, (req, res) => {
+  const order = db.getOrderById(req.params.id); if (!order) return res.status(404).json({ error: 'Order not found' });
+  res.json({ ...order, timeline: db.getCollection('order_events').filter(e => e.order_id === order.id) });
+});
+app.put('/api/orders/:id/assignment', authenticateToken, requireAdmin, (req, res) => {
+  const order = db.getOrderById(req.params.id); if (!order) return res.status(404).json({ error: 'Order not found' });
+  Object.assign(order, { rider_id: req.body.rider_id || null, preparation_minutes: Number(req.body.preparation_minutes || 0), customer_notes: req.body.customer_notes || order.notes });
+  db.saveDatabase(); audit(req, 'updated', 'order', order.id, req.body); res.json(order);
+});
+app.get('/api/notifications', authenticateToken, requireAdmin, (req, res) => res.json(db.getCollection('notifications').slice(0, 100)));
+app.post('/api/notifications/:id/read', authenticateToken, requireAdmin, (req, res) => res.json(db.updateCollection('notifications', req.params.id, { read_at: new Date().toISOString() }) || {}));
+app.get('/api/riders', authenticateToken, requireAdmin, (req, res) => res.json(db.getCollection('riders')));
+app.post('/api/riders', authenticateToken, requireAdmin, (req, res) => { const rider = db.insertCollection('riders', { name: req.body.name, phone: req.body.phone, status: 'available', zone: req.body.zone || '' }); audit(req, 'created', 'rider', rider.id, rider); res.status(201).json(rider); });
+app.put('/api/riders/:id', authenticateToken, requireAdmin, (req, res) => res.json(db.updateCollection('riders', req.params.id, req.body) || {}));
+app.get('/api/inventory', authenticateToken, requireAdmin, (req, res) => res.json(db.getCollection('inventory')));
+app.post('/api/inventory', authenticateToken, requireAdmin, (req, res) => { const item = db.insertCollection('inventory', { name: req.body.name, unit: req.body.unit || 'unit', stock: Number(req.body.stock || 0), low_stock_threshold: Number(req.body.low_stock_threshold || 5), menu_item_ids: req.body.menu_item_ids || [] }); audit(req, 'created', 'inventory', item.id, item); res.status(201).json(item); });
+app.put('/api/inventory/:id', authenticateToken, requireAdmin, (req, res) => res.json(db.updateCollection('inventory', req.params.id, req.body) || {}));
+app.get('/api/analytics', authenticateToken, requireAdmin, (req, res) => { const orders = db.getOrders(); const completed = orders.filter(o => o.status === 'delivered'); const byDay = {}; completed.forEach(o => { const day = String(o.created_at || '').slice(0, 10); byDay[day] = (byDay[day] || 0) + Number(o.total_amount || 0); }); res.json({ revenue: completed.reduce((s, o) => s + Number(o.total_amount || 0), 0), orders: orders.length, average_order: completed.length ? completed.reduce((s, o) => s + Number(o.total_amount || 0), 0) / completed.length : 0, byDay }); });
+app.get('/api/customers', authenticateToken, requireAdmin, (req, res) => { const orders = db.getOrders(); const grouped = {}; orders.forEach(o => { const key = o.customer_email || o.customer_phone || o.customer_name; const account = db.getUsers().find(u => u.email && u.email === o.customer_email); grouped[key] = { name: o.customer_name, email: o.customer_email, phone: o.customer_phone, address: o.delivery_address, account_id: account?.id || null, avatar_url: account?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(o.customer_name)}`, blocked: Boolean(account?.blocked), blocked_at: account?.blocked_at || null, orders: (grouped[key]?.orders || 0) + 1, spent: (grouped[key]?.spent || 0) + Number(o.total_amount || 0), order_history: [...(grouped[key]?.order_history || []), o] }; }); const profiles = db.getCollection('customer_profiles'); profiles.forEach(p => { const key = p.email || p.phone || p.name; grouped[key] = { ...p, ...(grouped[key] || {}), avatar_url: p.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(p.name)}`, order_history: grouped[key]?.order_history || [] }; }); let result = Object.values(grouped); if (req.query.condition === 'frequent') result = result.filter(c => c.orders >= 3).sort((a, b) => b.orders - a.orders); if (['top_spenders','high_value'].includes(req.query.condition)) result = result.sort((a, b) => b.spent - a.spent).slice(0, 10); if (req.query.condition === 'low_spenders') result = result.sort((a, b) => a.spent - b.spent).slice(0, 10); if (req.query.condition === 'blocked') result = result.filter(c => c.blocked).sort((a, b) => new Date(b.blocked_at || 0) - new Date(a.blocked_at || 0)); if (req.query.condition === 'active') result = result.filter(c => !c.blocked); if (req.query.condition === 'new') result = result.filter(c => c.orders <= 1); res.json(result); });
+app.post('/api/customers', authenticateToken, requireAdmin, (req, res) => { const { name, email, password, phone, address, notes, loyalty_points } = req.body; if (!name || !phone || !email || !password) return res.status(400).json({ error: 'Name, email, phone, and password are required' }); if (db.getUserByEmail(email)) return res.status(409).json({ error: 'A customer with this email already exists' }); const user = db.createUser({ name, email, password_hash: password, role: 'customer', phone, address }); const customer = db.insertCollection('customer_profiles', { user_id: user.id, name, email, phone, address: address || '', notes: notes || '', loyalty_points: Number(loyalty_points || 0), orders: 0, spent: 0, avatar_url: user.avatar_url }); audit(req, 'created', 'customer', user.id, customer); res.status(201).json({ ...customer, account_id: user.id, avatar_url: user.avatar_url }); });
+app.get('/api/customers/detail', authenticateToken, requireAdmin, (req, res) => { const key = String(req.query.email || req.query.phone || '').toLowerCase(); const user = db.getUsers().find(u => String(u.email || '').toLowerCase() === key || String(u.phone || '').toLowerCase() === key); if (user) { const orders = db.getOrders().filter(o => o.user_id === user.id || String(o.customer_email || '').toLowerCase() === String(user.email || '').toLowerCase()); return res.json({ ...publicUser(user), orders, order_count: orders.length, total_spent: orders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) }); } const profile = db.getCollection('customer_profiles').find(p => String(p.email || '').toLowerCase() === key || String(p.phone || '').toLowerCase() === key); if (!profile) return res.status(404).json({ error: 'Customer account not found' }); const orders = db.getOrders().filter(o => String(o.customer_email || '').toLowerCase() === String(profile.email || '').toLowerCase() || String(o.customer_phone || '') === String(profile.phone || '')); res.json({ id: profile.id, name: profile.name, email: profile.email, phone: profile.phone, address: profile.address, notes: profile.notes, avatar_url: profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(profile.name)}`, blocked: false, orders, order_count: orders.length, total_spent: orders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0), profile_only: true }); });
+app.put('/api/customers/:id/block', authenticateToken, requireAdmin, (req, res) => { const user = db.getUserById(req.params.id); if (user && user.role === 'customer') { user.blocked = Boolean(req.body.blocked); user.blocked_reason = user.blocked ? String(req.body.reason || 'Blocked by restaurant staff') : ''; user.blocked_at = user.blocked ? new Date().toISOString() : null; db.saveDatabase(); audit(req, user.blocked ? 'blocked' : 'unblocked', 'customer', user.id, { reason: user.blocked_reason }); return res.json(publicUser(user)); } const profile = db.getCollection('customer_profiles').find(p => String(p.id) === String(req.params.id)); if (!profile) return res.status(404).json({ error: 'Customer account not found' }); profile.blocked = Boolean(req.body.blocked); profile.blocked_reason = profile.blocked ? String(req.body.reason || 'Blocked by restaurant staff') : ''; profile.blocked_at = profile.blocked ? new Date().toISOString() : null; db.saveDatabase(); audit(req, profile.blocked ? 'blocked' : 'unblocked', 'customer', profile.id, { reason: profile.blocked_reason }); res.json({ ...profile, avatar_url: profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(profile.name)}` }); });
+app.delete('/api/customers/:id', authenticateToken, requireAdmin, (req, res) => { const user = db.getUserById(req.params.id); if (user && user.role === 'customer') { user.deleted_at = new Date().toISOString(); user.blocked = true; user.blocked_reason = 'Deleted by restaurant staff'; db.saveDatabase(); audit(req, 'deleted', 'customer', user.id); return res.json({ success: true }); } const profile = db.getCollection('customer_profiles').find(p => String(p.id) === String(req.params.id)); if (!profile) return res.status(404).json({ error: 'Customer account not found' }); profile.deleted_at = new Date().toISOString(); db.saveDatabase(); audit(req, 'deleted', 'customer', profile.id); res.json({ success: true }); });
+app.get('/api/coupons', authenticateToken, requireAdmin, (req, res) => res.json(db.getCollection('coupons')));
+app.post('/api/coupons', authenticateToken, requireAdmin, (req, res) => { const coupon = db.insertCollection('coupons', { code: String(req.body.code || '').toUpperCase(), type: req.body.type || 'fixed', value: Number(req.body.value || 0), minimum_order: Number(req.body.minimum_order || 0), usage_limit: Number(req.body.usage_limit || 0), active: req.body.active !== false }); audit(req, 'created', 'coupon', coupon.id, coupon); res.status(201).json(coupon); });
+app.get('/api/refunds', authenticateToken, requireAdmin, (req, res) => res.json(db.getCollection('refunds')));
+app.post('/api/refunds', authenticateToken, requireAdmin, (req, res) => { const refund = db.insertCollection('refunds', { order_id: req.body.order_id, amount: Number(req.body.amount || 0), reason: req.body.reason || '', status: 'processed', processed_by: req.user.id }); audit(req, 'created', 'refund', refund.id, refund); res.status(201).json(refund); });
+app.get('/api/audit-logs', authenticateToken, requireAdmin, (req, res) => res.json(db.getCollection('audit_logs').slice(0, 200)));
 
 // ----------------- DASHBOARD ANALYTICS ----------------- //
 

@@ -13,7 +13,7 @@ export default function ProductCard({ item, onSelect, onQuickAdd }) {
   };
 
   return (
-    <div className="group flex flex-col bg-white rounded-2xl border border-stone-200/80 hover:border-amber-400 overflow-hidden shadow-2xs hover:shadow-lg transition-all duration-200">
+    <div id={`product-${item.id}`} className="group flex flex-col bg-white rounded-2xl border border-stone-200/80 hover:border-amber-400 overflow-hidden shadow-2xs hover:shadow-lg transition-all duration-200 scroll-mt-32">
       {/* Product Image Box */}
       <div className="relative aspect-4/3 w-full bg-stone-100 overflow-hidden cursor-pointer" onClick={() => onSelect(item)}>
         {!imgError ? (
