@@ -3,6 +3,7 @@ import { X, Plus, Minus, Check, Flame } from 'lucide-react';
 
 export default function ItemCustomizeModal({ item, onClose, onAddToCart }) {
   if (!item) return null;
+  const primaryImage = item.image_url || (Array.isArray(item.image_urls) ? item.image_urls[0] : '');
 
   const isPizza = item.category_slug.includes('pizza') || item.name.toLowerCase().includes('pizza');
 
@@ -38,11 +39,14 @@ export default function ItemCustomizeModal({ item, onClose, onAddToCart }) {
     { id: 'mushrooms', name: 'Fresh Sliced Mushrooms', price: 100 },
     { id: 'garlic_sauce', name: 'Signature Garlic Mayo Dip', price: 60 }
   ];
+  const customOptionGroups = Array.isArray(item.options_json) ? item.options_json : [];
+  const hasCustomOptions = customOptionGroups.length > 0;
 
   const [selectedSize, setSelectedSize] = useState(sizeOptions[0]);
   const [selectedCrust, setSelectedCrust] = useState(crustOptions[0]);
   const [selectedSpice, setSelectedSpice] = useState(spiceLevels[1]);
   const [selectedAddons, setSelectedAddons] = useState([]);
+  const [selectedCustomOptions, setSelectedCustomOptions] = useState({});
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [quantity, setQuantity] = useState(1);
 
@@ -59,8 +63,9 @@ export default function ItemCustomizeModal({ item, onClose, onAddToCart }) {
   const sizeDelta = selectedSize ? selectedSize.priceDelta : 0;
   const crustDelta = isPizza && selectedCrust ? selectedCrust.priceDelta : 0;
   const addonsTotal = selectedAddons.reduce((sum, a) => sum + a.price, 0);
+  const customOptionsTotal = Object.values(selectedCustomOptions).flat().reduce((sum, option) => sum + Number(option.price || 0), 0);
 
-  const unitPrice = basePrice + sizeDelta + crustDelta + addonsTotal;
+  const unitPrice = basePrice + sizeDelta + crustDelta + addonsTotal + customOptionsTotal;
   const totalPrice = unitPrice * quantity;
 
   const handleConfirm = () => {
@@ -71,11 +76,12 @@ export default function ItemCustomizeModal({ item, onClose, onAddToCart }) {
       unitPrice,
       totalPrice,
       quantity,
-      image_url: item.image_url,
+      image_url: primaryImage,
       selectedSize: selectedSize ? selectedSize.name : null,
       selectedCrust: isPizza ? selectedCrust.name : null,
       selectedSpice,
       selectedAddons: selectedAddons.map(a => a.name),
+      selectedCustomOptions,
       specialInstructions: specialInstructions.trim()
     };
     onAddToCart(customizedItem);
@@ -88,7 +94,7 @@ export default function ItemCustomizeModal({ item, onClose, onAddToCart }) {
         {/* Top Header with Image */}
         <div className="relative h-44 sm:h-52 w-full bg-stone-900 shrink-0">
           <img
-            src={item.image_url}
+            src={primaryImage}
             alt={item.name}
             className="w-full h-full object-cover opacity-90"
           />
@@ -173,6 +179,12 @@ export default function ItemCustomizeModal({ item, onClose, onAddToCart }) {
             </div>
           )}
 
+          {hasCustomOptions ? customOptionGroups.map((group, groupIndex) => (
+            <div key={`${group.name}-${groupIndex}`} className="space-y-2.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-stone-500">{group.name}</label>
+              {group.type === 'notes' ? <textarea rows={2} value={selectedCustomOptions[groupIndex]?.[0]?.name || ''} onChange={e => setSelectedCustomOptions({ ...selectedCustomOptions, [groupIndex]: [{ name: e.target.value, price: 0 }] })} placeholder="Add your instructions" className="w-full rounded-xl border border-stone-200 p-3 text-xs" /> : <div className="grid gap-2 sm:grid-cols-2">{(group.options || []).map((option, optionIndex) => { const selected = (selectedCustomOptions[groupIndex] || []).some(item => item.name === option.name); return <button type="button" key={`${option.name}-${optionIndex}`} onClick={() => { const current = selectedCustomOptions[groupIndex] || []; const next = group.type === 'multiple' ? (selected ? current.filter(item => item.name !== option.name) : [...current, option]) : [option]; setSelectedCustomOptions({ ...selectedCustomOptions, [groupIndex]: next }); }} className={`rounded-xl border p-3 text-left text-xs ${selected ? 'border-amber-500 bg-amber-50 font-semibold' : 'border-stone-200 hover:border-stone-300'}`}><span>{option.name}</span>{Number(option.price) > 0 && <span className="float-right font-mono text-amber-700">+Rs. {Number(option.price).toLocaleString()}</span>}</button> })}</div>}
+            </div>
+          )) : <>
           {/* Spice Level */}
           <div className="space-y-2.5">
             <label className="text-xs font-bold text-stone-500 uppercase tracking-wider block flex items-center gap-1.5">
@@ -244,6 +256,9 @@ export default function ItemCustomizeModal({ item, onClose, onAddToCart }) {
               className="w-full p-3 rounded-xl border border-stone-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 text-xs text-stone-800 outline-hidden resize-none"
             />
           </div>
+          </>}
+
+          {hasCustomOptions && <div className="space-y-2"><label className="block text-xs font-bold uppercase tracking-wider text-stone-500">Cooking or Delivery Notes</label><textarea rows={2} value={specialInstructions} onChange={e => setSpecialInstructions(e.target.value)} placeholder="Add a note for the kitchen or rider" className="w-full resize-none rounded-xl border border-stone-200 p-3 text-xs" /></div>}
         </div>
 
         {/* Modal Bottom Bar with Quantity & CTA */}

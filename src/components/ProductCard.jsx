@@ -4,6 +4,7 @@ import { Heart, Plus, Sparkles } from 'lucide-react';
 export default function ProductCard({ item, onSelect, onQuickAdd }) {
   const [isLiked, setIsLiked] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const primaryImage = item.image_url || (Array.isArray(item.image_urls) ? item.image_urls[0] : '');
 
   const formatPrice = (p) => {
     return Number(p).toLocaleString('en-PK', {
@@ -18,7 +19,7 @@ export default function ProductCard({ item, onSelect, onQuickAdd }) {
       <div className="relative aspect-4/3 w-full bg-stone-100 overflow-hidden cursor-pointer" onClick={() => onSelect(item)}>
         {!imgError ? (
           <img
-            src={item.image_url}
+            src={primaryImage}
             alt={item.name}
             onError={() => setImgError(true)}
             className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"

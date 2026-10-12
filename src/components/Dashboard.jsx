@@ -40,6 +40,8 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
   const [newItemDesc, setNewItemDesc] = useState('');
   const [newItemImages, setNewItemImages] = useState(['']);
   const [newItemIsDeal, setNewItemIsDeal] = useState(false);
+  const [newItemOptions, setNewItemOptions] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
   // MySQL Console States
   const [sqlQuery, setSqlQuery] = useState("SELECT id, customer_name, total_amount, status FROM orders LIMIT 10;");
@@ -200,7 +202,8 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
         description: newItemDesc,
         image_url: newItemImages.find(image => !image.startsWith('data:')) || '',
         image_urls: newItemImages.filter(image => !image.startsWith('data:')),
-        is_deal: newItemIsDeal
+        is_deal: newItemIsDeal,
+        options_json: newItemOptions.filter(group => group.name.trim() && group.options.some(option => option.name.trim())).map(group => ({ ...group, options: group.options.filter(option => option.name.trim()).map(option => ({ ...option, price: Number(option.price || 0) })) }))
       };
       let res = await fetch('/api/products', {
         method: 'POST',
@@ -221,6 +224,7 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
         setNewItemPrice('');
         setNewItemDesc('');
         setNewItemImages(['']);
+        setNewItemOptions([]);
         fetchData();
         alert('Menu item saved successfully.');
       } else {
@@ -556,21 +560,38 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
         {/* TAB 2: MENU CATALOG MANAGEMENT */}
         {activeTab === 'menu' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-stone-700 uppercase tracking-wider">
-                Product Catalog & Pricing
-              </h2>
-              <button
-                onClick={() => setIsAddModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Menu Item</span>
+            <div className="rounded-2xl bg-stone-950 p-5 text-white shadow-lg sm:flex sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-400">Product bar</p>
+                <h2 className="mt-1 text-xl font-black">Manage your products</h2>
+                <p className="mt-1 text-xs text-stone-300">Add products, review details, and manage your catalog in one place.</p>
+              </div>
+              <button onClick={() => setIsAddModalOpen(true)} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-xs font-black text-stone-950 shadow-sm transition hover:bg-amber-400 sm:mt-0">
+                <Plus className="h-4 w-4" /> Add product
               </button>
             </div>
 
+            <div className="flex items-center justify-between">
+              <div><h2 className="text-sm font-bold uppercase tracking-wider text-stone-700">Product catalog</h2><p className="mt-1 text-xs text-stone-500">{menuItems.length} products in your menu</p></div>
+            </div>
+
             <div className="bg-white rounded-2xl border border-stone-200/80 shadow-2xs overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className="divide-y divide-stone-100">
+                {menuItems.map(item => (
+                  <div key={item.id} className="flex items-center gap-4 p-4 transition hover:bg-amber-50/40 sm:p-5">
+                    <img src={item.image_url || item.image_urls?.[0]} alt={item.name} className="h-16 w-16 shrink-0 rounded-xl bg-stone-100 object-cover object-center sm:h-20 sm:w-20" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-sm font-black text-stone-900 sm:text-base">{item.name}</h3>{item.is_deal && <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">Deal combo</span>}</div>
+                      <p className="mt-1 line-clamp-1 text-xs text-stone-500">{item.description || 'No description added yet.'}</p>
+                      <p className="mt-2 text-xs font-bold capitalize text-stone-400">{item.category_slug.replace(/-/g, ' ')}</p>
+                    </div>
+                    <div className="hidden text-right sm:block"><p className="text-[10px] uppercase tracking-wider text-stone-400">Price</p><p className="font-mono text-sm font-black text-amber-700">Rs. {Number(item.price).toLocaleString()}</p></div>
+                    <div className="flex shrink-0 items-center gap-1"><button onClick={() => setSelectedProduct(item)} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-black text-amber-800 transition hover:bg-amber-100">View detail</button><button onClick={() => handleDeleteMenuItem(item.id)} className="rounded-lg p-2 text-stone-400 hover:bg-rose-50 hover:text-rose-600" title="Delete item"><Trash2 className="h-4 w-4" /></button></div>
+                  </div>
+                ))}
+                {menuItems.length === 0 && <div className="p-10 text-center text-sm text-stone-400">No products yet. Add your first product above.</div>}
+                {/* Keep the old table markup out of the layout while retaining no duplicate rows. */}
+                <div className="hidden">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-stone-200 bg-stone-100/80 text-stone-600 font-bold uppercase tracking-wider">
@@ -623,6 +644,7 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           </div>
@@ -893,6 +915,20 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
         </div>
       )}
 
+      {selectedProduct && (
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-stone-950/70 p-4 backdrop-blur-sm" onClick={() => setSelectedProduct(null)}>
+          <div className="relative w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+            <img src={selectedProduct.image_url || selectedProduct.image_urls?.[0]} alt={selectedProduct.name} className="h-56 w-full object-cover object-center" />
+            <div className="p-6">
+              <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-widest text-amber-600">{selectedProduct.category_slug.replace(/-/g, ' ')}</p><h3 className="mt-1 text-2xl font-black text-stone-900">{selectedProduct.name}</h3></div><button onClick={() => setSelectedProduct(null)} className="rounded-xl p-2 text-stone-400 hover:bg-stone-100">×</button></div>
+              <p className="mt-4 text-sm leading-6 text-stone-600">{selectedProduct.description || 'No description added yet.'}</p>
+              <div className="mt-5 flex items-center justify-between rounded-2xl bg-amber-50 p-4"><span className="text-xs font-bold uppercase tracking-wider text-stone-500">Price</span><span className="font-mono text-xl font-black text-amber-700">Rs. {Number(selectedProduct.price).toLocaleString()}</span></div>
+              <div className="mt-5 flex justify-end"><button onClick={() => { setSelectedProduct(null); setIsAddModalOpen(false); }} className="rounded-xl bg-stone-950 px-4 py-2.5 text-xs font-bold text-white">Close details</button></div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Item Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-950/70 backdrop-blur-xs flex items-center justify-center p-4">
@@ -956,7 +992,8 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
               </div>
 
               <div className="product-image-field">
-                <label className="font-bold block mb-1">Product Image</label>
+                <label className="font-bold block mb-1">Product Images</label>
+                <p className="mb-2 text-[11px] text-stone-500">The first image is the primary image shown on product cards and the website. Large images are fitted neatly into the display area.</p>
                 <textarea rows={3} value={newItemImages.filter(image => !image.startsWith('data:')).join('\n')} onChange={e => setNewItemImages(e.target.value.split(/\n|,/).map(value => value.trim()).filter(Boolean).slice(0, 5))} placeholder="Paste multiple image URLs, one per line" className="w-full rounded-xl border border-stone-300 p-2.5 text-xs" />
                 <label className="mt-2 block cursor-pointer rounded-xl border border-dashed border-stone-300 p-3 text-center text-xs font-bold text-stone-600 hover:bg-stone-50">Upload multiple images from PC<input type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={async e => { const files = Array.from(e.target.files || []).slice(0, 5); const loaded = await Promise.all(files.map(compressMenuImage)); setNewItemImages(loaded.filter(Boolean).slice(0, 5)); e.target.value = ''; }} /></label>
                 <div className="space-y-2">{newItemImages.map((image, index) => <div key={index} className="flex gap-2"><input type="url" value={image.startsWith('data:') ? '' : image} onChange={(e) => { const next = [...newItemImages]; next[index] = e.target.value; setNewItemImages(next); }} placeholder={`Image ${index + 1} URL`} className="min-w-0 flex-1 p-2.5 rounded-xl border border-stone-300" /><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e) => { const file = e.target.files?.[0]; if (!file) return; if (file.size > 5 * 1024 * 1024) return alert('Each image must be smaller than 5 MB.'); const reader = new FileReader(); reader.onload = () => { const next = [...newItemImages]; next[index] = String(reader.result); setNewItemImages(next); }; reader.readAsDataURL(file); }} className="w-32 rounded-xl border border-dashed border-stone-300 p-2 text-[10px]" />{newItemImages.length > 1 && <button type="button" onClick={() => setNewItemImages(newItemImages.filter((_, i) => i !== index))} className="px-2 text-rose-600">✕</button>}</div>)}</div>
@@ -975,6 +1012,11 @@ export default function Dashboard({ onReturnToStore, currentUser }) {
                   className="w-4 h-4 text-amber-600 rounded"
                 />
                 <label htmlFor="dealCheck" className="font-medium">Mark as Special Combo Deal</label>
+              </div>
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+                <div className="flex items-start justify-between gap-3"><div><label className="font-bold block text-stone-900">Customization options</label><p className="mt-1 text-[11px] text-stone-500">Add groups like Spice Level, Toppings, Sizes, or Notes. Name everything your way.</p></div><button type="button" onClick={() => setNewItemOptions([...newItemOptions, { name: '', type: 'single', options: [{ name: '', price: 0 }] }])} className="shrink-0 rounded-lg bg-stone-950 px-3 py-2 text-[11px] font-bold text-white">+ Add group</button></div>
+                <div className="mt-3 space-y-3">{newItemOptions.map((group, gi) => <div key={gi} className="rounded-xl border border-amber-200 bg-white p-3"><div className="flex gap-2"><input value={group.name} onChange={e => { const next = [...newItemOptions]; next[gi] = { ...group, name: e.target.value }; setNewItemOptions(next); }} placeholder="Group name e.g. Spice Level" className="min-w-0 flex-1 rounded-lg border border-stone-300 p-2 text-xs" /><select value={group.type} onChange={e => { const next = [...newItemOptions]; next[gi] = { ...group, type: e.target.value }; setNewItemOptions(next); }} className="rounded-lg border border-stone-300 p-2 text-xs"><option value="single">Choose one</option><option value="multiple">Choose multiple</option><option value="notes">Text notes</option></select><button type="button" onClick={() => setNewItemOptions(newItemOptions.filter((_, i) => i !== gi))} className="px-2 text-rose-600">×</button></div>{group.type === 'notes' ? <p className="mt-2 text-[11px] text-stone-400">Customers will see a text box for this group.</p> : <div className="mt-2 space-y-2">{group.options.map((option, oi) => <div key={oi} className="flex gap-2"><input value={option.name} onChange={e => { const next = [...newItemOptions]; const options = [...group.options]; options[oi] = { ...option, name: e.target.value }; next[gi] = { ...group, options }; setNewItemOptions(next); }} placeholder="Option name" className="min-w-0 flex-1 rounded-lg border border-stone-300 p-2 text-xs" /><input type="number" min="0" value={option.price} onChange={e => { const next = [...newItemOptions]; const options = [...group.options]; options[oi] = { ...option, price: e.target.value }; next[gi] = { ...group, options }; setNewItemOptions(next); }} placeholder="Extra Rs." className="w-24 rounded-lg border border-stone-300 p-2 text-xs" /><button type="button" onClick={() => { const next = [...newItemOptions]; next[gi] = { ...group, options: group.options.filter((_, i) => i !== oi) }; setNewItemOptions(next); }} className="px-1 text-rose-600">×</button></div>)}<button type="button" onClick={() => { const next = [...newItemOptions]; next[gi] = { ...group, options: [...group.options, { name: '', price: 0 }] }; setNewItemOptions(next); }} className="text-[11px] font-bold text-amber-700">+ Add option</button></div>}</div>)}</div>
               </div>
 
               <div className="pt-2 flex justify-end gap-2">
