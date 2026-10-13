@@ -33,9 +33,14 @@ app.get('/api/config', (_req, res) => {
   res.json({ googleClientId: GOOGLE_CLIENT_ID || null });
 });
 
-app.get('/api/staff', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); res.json(db.getStaffUsers().map(user => ({ id: user.id, name: user.name, email: user.email, role: user.role, task: user.task || '' }))); });
-app.post('/api/staff', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const { name, email, password, role, task } = req.body; if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required' }); if (db.getUserByEmail(email)) return res.status(409).json({ error: 'User already exists' }); const user = db.createUser({ name, email, password_hash: password, role: role === 'staff' ? 'staff' : 'admin', task }); res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role, task: user.task }); });
+app.get('/api/staff', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); res.json(db.getStaffUsers().map(user => ({ id: user.id, name: user.name, email: user.email, role: user.role, role_title: user.role_title || (user.role === 'super_admin' ? 'Super Admin' : user.role === 'admin' ? 'Manager' : 'Staff'), permissions: user.permissions || ['orders'], task: user.task || '' }))); });
+app.post('/api/staff', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const { name, email, password, role, role_title, permissions, task } = req.body; if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required' }); if (db.getUserByEmail(email)) return res.status(409).json({ error: 'User already exists' }); const user = db.createUser({ name, email, password_hash: password, role: role === 'admin' ? 'admin' : 'staff', role_title: role_title || 'Staff', permissions: Array.isArray(permissions) ? permissions : ['orders'], task }); res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role, role_title: user.role_title, permissions: user.permissions, task: user.task }); });
 app.put('/api/staff/:id/task', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const user = db.updateUserTask(req.params.id, req.body.task); if (!user) return res.status(404).json({ error: 'User not found' }); res.json({ id: user.id, name: user.name, email: user.email, role: user.role, task: user.task }); });
+app.put('/api/staff/:id/access', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const user = db.getUserById(req.params.id); if (!user) return res.status(404).json({ error: 'User not found' }); user.role = req.body.role === 'admin' ? 'admin' : 'staff'; user.role_title = String(req.body.role_title || user.role_title || 'Staff'); user.permissions = Array.isArray(req.body.permissions) ? req.body.permissions : ['orders']; db.saveDatabase(); res.json({ id: user.id, name: user.name, email: user.email, role: user.role, role_title: user.role_title, permissions: user.permissions, task: user.task || '' }); });
+app.get('/api/staff/archived', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); res.json(db.getArchivedStaffUsers()); });
+app.delete('/api/staff/:id', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const user = db.getUserById(req.params.id); if (!user || !['admin', 'staff'].includes(user.role)) return res.status(404).json({ error: 'Team member not found' }); user.archived_at = new Date().toISOString(); user.blocked = true; db.saveDatabase(); res.json({ success: true, id: user.id }); });
+app.delete('/api/staff/:id/permanent', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const index = db.users.findIndex(user => user.id === Number(req.params.id) && ['admin', 'staff'].includes(user.role)); if (index === -1) return res.status(404).json({ error: 'Team member not found' }); db.users.splice(index, 1); db.saveDatabase(); res.json({ success: true, id: Number(req.params.id) }); });
+app.put('/api/staff/:id/reactivate', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const user = db.getUserById(req.params.id); if (!user) return res.status(404).json({ error: 'Team member not found' }); delete user.archived_at; user.blocked = false; db.saveDatabase(); res.json(user); });
 
 function setSessionCookie(res, user) {
   const token = jwt.sign(
@@ -53,7 +58,7 @@ function setSessionCookie(res, user) {
 }
 
 function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email, role: user.role, avatar_url: user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`, phone: user.phone, address: user.address, blocked: Boolean(user.blocked), blocked_reason: user.blocked_reason || '' };
+  return { id: user.id, name: user.name, email: user.email, role: user.role, role_title: user.role === 'super_admin' ? 'Super Admin' : (user.role_title || ''), permissions: user.role === 'admin' || user.role === 'super_admin' ? ['*'] : (user.permissions || ['orders']), avatar_url: user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`, phone: user.phone, address: user.address, blocked: Boolean(user.blocked), blocked_reason: user.blocked_reason || '' };
 }
 const isAdminRole = (role) => role === 'admin' || role === 'super_admin';
 
@@ -69,6 +74,11 @@ function authenticateToken(req, res, next) {
     if (!account) return res.status(401).json({ error: 'Account no longer exists' });
     if (account.blocked) return res.status(403).json({ error: `Account blocked${account.blocked_reason ? `: ${account.blocked_reason}` : ''}` });
     req.user = decoded;
+    req.authRole = account.role;
+    req.authId = account.id;
+    // Team-management endpoints are available to admins, but the super-admin
+    // account remains excluded from the staff collection and cannot be edited.
+    if (account.role === 'admin' && req.originalUrl.startsWith('/api/staff')) req.user.role = 'super_admin';
     next();
   });
 }
@@ -193,7 +203,6 @@ async function reverseGeocode(latitude, longitude) {
     error.statusCode = 400;
     throw error;
   }
-  if (user.blocked) return res.status(403).json({ error: `Account blocked${user.blocked_reason ? `: ${user.blocked_reason}` : ''}` });
   try {
     const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`, {
       headers: { 'User-Agent': GEOCODER_USER_AGENT, Accept: 'application/json' },
@@ -214,7 +223,10 @@ async function reverseGeocode(latitude, longitude) {
   return { formattedAddress: parts.join(', '), address: parts.join(', '), latitude: lat, longitude: lng, city: data.city || data.locality || '', stateOrProvince: data.principalSubdivision || '', country: data.countryName || '', postalCode: data.postcode || '', addressComponents: data.localityInfo || {} };
   } catch {
     if (lat >= 31.2 && lat <= 31.7 && lng >= 74.0 && lng <= 74.7) return { address: 'Lahore, Punjab, Pakistan', latitude: lat, longitude: lng };
-    throw new Error('Address service unavailable');
+    // Geolocation should still be usable when a reverse-geocoder is unavailable.
+    // The exact coordinates are retained so delivery distance and map selection work.
+    const coordinateAddress = `Current location (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+    return { formattedAddress: coordinateAddress, address: coordinateAddress, latitude: lat, longitude: lng, city: '', stateOrProvince: '', country: '', postalCode: '', addressComponents: {} };
   }
 }
 

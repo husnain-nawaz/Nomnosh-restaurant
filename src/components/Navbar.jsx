@@ -70,9 +70,10 @@ export default function Navbar({
         {/* Right Action Zone */}
         <div className="flex items-center gap-3">
           {/* Switch Storefront <-> Dashboard */}
-          {(currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
+          {(['staff', 'admin', 'super_admin'].includes(currentUser?.role)) && (
             <button
-              onClick={() => setViewMode(viewMode === 'storefront' ? 'dashboard' : 'storefront')}
+              type="button"
+              onClick={() => setViewMode(viewMode === 'dashboard' ? 'storefront' : 'dashboard')}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs ${
                 viewMode === 'dashboard'
                   ? 'bg-stone-900 text-amber-400 border border-stone-800'
@@ -80,7 +81,7 @@ export default function Navbar({
               }`}
             >
               <ShieldAlert className="w-4 h-4 text-amber-500" />
-              <span>{viewMode === 'dashboard' ? 'Return to Store' : 'Admin Dashboard'}</span>
+              <span>{viewMode === 'dashboard' ? 'Return to Store' : 'Dashboard'}</span>
             </button>
           )}
 

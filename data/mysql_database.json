@@ -16,13 +16,19 @@
       "id": 1,
       "name": "Store Manager",
       "email": "admin@nomnoshpizza.com",
-      "password_hash": "admin123",
+      "password_hash": "admin",
       "role": "admin",
       "google_id": null,
       "avatar_url": "https://api.dicebear.com/7.x/bottts/svg?seed=admin",
       "phone": "+92 304 1118514",
       "address": "88-A, Main Fateh Sher Road, Sahiwal",
-      "created_at": "2026-01-01 10:00:00"
+      "created_at": "2026-01-01 10:00:00",
+      "task": "top level",
+      "blocked": false,
+      "role_title": "Manager",
+      "permissions": [
+        "*"
+      ]
     },
     {
       "id": 2,
@@ -75,7 +81,42 @@
       "phone": null,
       "address": null,
       "task": "a1",
-      "created_at": "2026-10-11 18:09:33"
+      "created_at": "2026-10-11 18:09:33",
+      "role_title": "Staff",
+      "permissions": [
+        "orders",
+        "customers",
+        "finance",
+        "promos",
+        "locations",
+        "mysql",
+        "menu",
+        "analytics",
+        "audit",
+        "kitchen"
+      ],
+      "blocked": true,
+      "archived_at": "2026-10-13T10:08:33.776Z"
+    },
+    {
+      "id": 6,
+      "name": "musa",
+      "email": "musa@gmail.com",
+      "password_hash": "musa",
+      "role": "staff",
+      "google_id": null,
+      "avatar_url": "https://api.dicebear.com/7.x/avataaars/svg?seed=musa",
+      "phone": null,
+      "address": null,
+      "task": "inv mang",
+      "created_at": "2026-10-13 08:45:21",
+      "role_title": "Staff",
+      "permissions": [
+        "orders",
+        "inventory",
+        "finance"
+      ],
+      "blocked": false
     }
   ],
   "categories": [

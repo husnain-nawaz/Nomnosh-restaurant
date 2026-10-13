@@ -17,8 +17,8 @@ export default function App() {
   const storefrontScrollY = useRef(Number(sessionStorage.getItem('nomnosh_storefront_scroll') || 0));
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
-  const [activeCategory, setActiveCategory] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState(() => sessionStorage.getItem('nomnosh_active_category') || 'all');
+  const [searchQuery, setSearchQuery] = useState(() => sessionStorage.getItem('nomnosh_search_query') || '');
   const [deliveryLocation, setDeliveryLocation] = useState(() => {
     try {
       const saved = localStorage.getItem('nomnosh_delivery_location');
@@ -64,7 +64,7 @@ export default function App() {
 
   // Require a delivery location before storefront ordering begins.
   useEffect(() => {
-    const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
+    const isAdmin = ['staff', 'admin', 'super_admin'].includes(currentUser?.role);
     if (deliveryLocation || isAdmin || viewMode === 'dashboard') return undefined;
     const timer = window.setTimeout(() => setIsLocationOpen(true), 3000);
     return () => window.clearTimeout(timer);
@@ -77,7 +77,6 @@ export default function App() {
         .then(data => {
           if (data?.user) {
             setCurrentUser(data.user);
-            if (data.user.role === 'admin' || data.user.role === 'super_admin') setViewMode('dashboard');
           }
         })
         .catch(() => setCurrentUser(null));
@@ -157,6 +156,9 @@ export default function App() {
     sessionStorage.setItem('nomnosh_view_mode', viewMode);
     if (viewMode === 'storefront') window.requestAnimationFrame(() => window.scrollTo({ top: storefrontScrollY.current, behavior: 'instant' }));
   }, [viewMode]);
+
+  useEffect(() => { sessionStorage.setItem('nomnosh_active_category', activeCategory); }, [activeCategory]);
+  useEffect(() => { sessionStorage.setItem('nomnosh_search_query', searchQuery); }, [searchQuery]);
 
   useEffect(() => {
     const saveScroll = () => { if (viewMode === 'storefront') { storefrontScrollY.current = window.scrollY; sessionStorage.setItem('nomnosh_storefront_scroll', String(window.scrollY)); } };
@@ -324,7 +326,6 @@ export default function App() {
         onClose={() => setIsAuthOpen(false)}
         onAuthSuccess={(user) => {
           setCurrentUser(user);
-          if (user.role === 'admin' || user.role === 'super_admin') setViewMode('dashboard');
         }}
       />
 
@@ -332,7 +333,7 @@ export default function App() {
       <LocationModal
         isOpen={isLocationOpen}
         onClose={() => {
-          if (deliveryLocation) setIsLocationOpen(false);
+          setIsLocationOpen(false);
         }}
         currentLocation={deliveryLocation}
         onSelectLocation={(location) => {

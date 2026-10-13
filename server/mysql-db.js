@@ -34,7 +34,7 @@ const INITIAL_DB = {
       id: 1,
       name: "Store Manager",
       email: "admin@nomnoshpizza.com",
-      password_hash: "admin123", // demo password
+      password_hash: "admin", // demo password
       role: "admin",
       google_id: null,
       avatar_url: "https://api.dicebear.com/7.x/bottts/svg?seed=admin",
@@ -1068,6 +1068,8 @@ class MySqlEngine {
       email: userData.email,
       password_hash: userData.password_hash || null,
       role: userData.role || "customer",
+      role_title: userData.role_title || (userData.role === 'admin' ? 'Manager' : 'Staff'),
+      permissions: Array.isArray(userData.permissions) ? userData.permissions : ['orders'],
       google_id: userData.google_id || null,
       avatar_url: userData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(userData.name)}`,
       phone: userData.phone || null,
@@ -1079,7 +1081,8 @@ class MySqlEngine {
     this.saveDatabase();
     return newUser;
   }
-  getStaffUsers() { return this.db.users.filter(user => ['admin', 'staff'].includes(user.role)); }
+  getStaffUsers() { return this.db.users.filter(user => ['super_admin', 'admin', 'staff'].includes(user.role) && !user.archived_at); }
+  getArchivedStaffUsers() { return this.db.users.filter(user => ['admin', 'staff'].includes(user.role) && user.archived_at); }
   updateUserTask(id, task) { const user = this.db.users.find(item => item.id === Number(id)); if (!user) return null; user.task = task || ''; this.saveDatabase(); return user; }
 
   getCategories() {

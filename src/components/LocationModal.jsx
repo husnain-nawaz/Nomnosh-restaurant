@@ -163,6 +163,16 @@ export default function LocationModal({ isOpen, currentLocation, onClose, onSele
     setLocating(true);
     setMessage('Finding your current location…');
     navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+      const coordinateFallback = {
+        formattedAddress: `Current location (${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)})`,
+        address: `Current location (${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)})`,
+        placeName: 'Current location',
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        city: '', stateOrProvince: '', country: '', postalCode: '',
+        placeId: `coordinates:${coords.latitude},${coords.longitude}`,
+        locationSource: 'current'
+      };
       try {
         const response = await fetch(`/api/geocode?lat=${encodeURIComponent(coords.latitude)}&lng=${encodeURIComponent(coords.longitude)}`);
         const data = await jsonResponse(response);
@@ -175,7 +185,12 @@ export default function LocationModal({ isOpen, currentLocation, onClose, onSele
           locationSource: 'current',
           deliveryAvailable: data.deliveryAvailable, etaMinutes: data.etaMinutes
         });
-      } catch { setSearchState('error'); setMessage('Unable to resolve your current location. Please search for an address.'); }
+      } catch {
+        // Reverse-geocoding is optional. Keep the exact browser coordinates so
+        // users can continue even when an address provider is down or blocked.
+        chooseSuggestion(coordinateFallback);
+        setMessage('Location found from your device. Confirm it below.');
+      }
       finally { setLocating(false); }
     }, (error) => { setLocating(false); setSearchState('error'); setMessage(error.code === 1 ? 'Location permission was denied. Please allow access or search for an address.' : error.code === 3 ? 'Location request timed out. Please try again or search for an address.' : 'Your current location is unavailable. Please search for an address.'); }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 });
   };
