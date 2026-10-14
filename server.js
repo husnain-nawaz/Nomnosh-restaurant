@@ -29,18 +29,118 @@ app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(cookieParser());
 
+// Every request is scoped to one restaurant tenant. Platform routes can opt into
+// the platform tenant explicitly; restaurant data never falls back across slugs.
+app.use((req, _res, next) => {
+  const slug = String(req.headers['x-restaurant-slug'] || 'nomnosh').toLowerCase().replace(/[^a-z0-9-]/g, '');
+  db.ensureTenant(slug || 'nomnosh');
+  db.runWithTenant(slug || 'nomnosh', next);
+});
+
 app.get('/api/config', (_req, res) => {
   res.json({ googleClientId: GOOGLE_CLIENT_ID || null });
 });
+app.post('/api/platform/applications', (req, res) => {
+  const { name, email, restaurant, phone } = req.body || {};
+  if (!name || !email || !restaurant) return res.status(400).json({ error: 'Name, email, and restaurant are required' });
+  const duplicate = (db.db.platform_applications || []).find(item => item.email.toLowerCase() === String(email).toLowerCase() && item.restaurant.toLowerCase() === String(restaurant).toLowerCase() && item.status === 'pending');
+  if (duplicate) return res.status(409).json({ error: 'An application for this email and restaurant is already pending.' });
+  const application = db.insertCollection('platform_applications', { name: String(name), email: String(email), restaurant: String(restaurant), phone: String(phone || ''), status: 'pending' });
+  res.status(201).json(application);
+});
+app.delete('/api/platform/applications/:id', (req, res) => {
+  const applications = db.db.platform_applications || [];
+  const index = applications.findIndex(item => String(item.id) === String(req.params.id));
+  if (index < 0) return res.status(404).json({ error: 'Application not found' });
+  applications.splice(index, 1); db.saveDatabase(); res.json({ success: true });
+});
+app.put('/api/platform/applications/:id/status', (req, res) => {
+  const application = (db.db.platform_applications || []).find(item => String(item.id) === String(req.params.id));
+  if (!application) return res.status(404).json({ error: 'Application not found' });
+  const status = String(req.body?.status || '').toLowerCase();
+  if (!['pending', 'active', 'paid', 'trial', 'rejected'].includes(status)) return res.status(400).json({ error: 'Invalid application status' });
+  if (status === 'active' && !application.tenant_slug_created) {
+    const slug = String(application.restaurant).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `restaurant-${Date.now()}`;
+    db.ensureTenant(slug);
+    db.createEmptyTenant(slug);
+    db.runWithTenant(slug, () => {
+      if (!db.getUserByEmail(application.email)) db.createUser({ name: application.name, email: application.email, password_hash: application.password || 'change-me', role: 'super_admin', role_title: 'Restaurant Owner', permissions: ['*'] });
+    });
+    application.tenant_slug_created = slug;
+  }
+  application.status = status; application.updated_at = new Date().toISOString(); db.saveDatabase();
+  res.json(application);
+});
+app.get('/api/platform/owner-access', (req, res) => {
+  const token = req.cookies.nomnosh_session;
+  let account = null;
+  if (token) { try { const decoded = jwt.verify(token, JWT_SECRET); account = (db.db.users || []).find(user => user.id === Number(decoded.id)); } catch {} }
+  const tenant = account?.tenant_slug || String(req.query.tenant || '').toLowerCase();
+  let record = (db.db.platform_applications || []).find(item => item.tenant_slug_created === tenant && (!account || item.email.toLowerCase() === String(account.email || '').toLowerCase()));
+  if (!record && (!account || account.tenant_slug === 'platform')) record = (db.db.platform_applications || []).filter(item => item.tenant_slug_created && ['active', 'paid', 'trial'].includes(item.status)).sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))[0];
+  const resolvedTenant = record?.tenant_slug_created || tenant;
+  res.json({ tenant_slug: resolvedTenant, email: record?.email || '', status: record?.status || 'pending', approved: ['active', 'paid', 'trial'].includes(record?.status) });
+});
+app.get('/api/platform/tenant-status/:slug', (req, res) => {
+  const slug = String(req.params.slug || '').toLowerCase();
+  const application = (db.db.platform_applications || []).find(item => item.tenant_slug_created === slug);
+  if (!application && ['nomnosh', 'cheezious'].includes(slug)) return res.json({ allowed: true, status: 'active' });
+  const allowed = Boolean(application && ['active', 'paid', 'trial'].includes(application.status));
+  res.json({ allowed, status: application?.status || 'pending' });
+});
+app.delete('/api/platform/tenants/:slug', async (req, res) => {
+  const slug = String(req.params.slug || '').toLowerCase();
+  if (['nomnosh', 'cheezious', 'platform'].includes(slug)) return res.status(400).json({ error: 'This protected restaurant cannot be archived.' });
+  const records = (db.db.platform_applications || []).filter(item => item.tenant_slug_created === slug);
+  if (!records.length) return res.status(404).json({ error: 'Restaurant not found.' });
+  const tenantTables = ['users','locations','categories','menu_items','orders','order_events','notifications','riders','inventory','coupons','refunds','audit_logs','payment_reconciliations','customer_profiles'];
+  for (const table of tenantTables) db.db[table] = (db.db[table] || []).filter(row => row.tenant_slug !== slug);
+  db.db.platform_applications = (db.db.platform_applications || []).filter(item => item.tenant_slug_created !== slug);
+  db.db.platform_deleted_tenants = db.db.platform_deleted_tenants || [];
+  if (!db.db.platform_deleted_tenants.some(item => item.slug === slug)) db.db.platform_deleted_tenants.push({ slug, deleted_at: new Date().toISOString() });
+  await db.saveDatabase();
+  res.json({ success: true, slug, deleted: true });
+});
 
-app.get('/api/staff', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); res.json(db.getStaffUsers().map(user => ({ id: user.id, name: user.name, email: user.email, role: user.role, role_title: user.role_title || (user.role === 'super_admin' ? 'Super Admin' : user.role === 'admin' ? 'Manager' : 'Staff'), permissions: user.permissions || ['orders'], task: user.task || '' }))); });
-app.post('/api/staff', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const { name, email, password, role, role_title, permissions, task } = req.body; if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required' }); if (db.getUserByEmail(email)) return res.status(409).json({ error: 'User already exists' }); const user = db.createUser({ name, email, password_hash: password, role: role === 'admin' ? 'admin' : 'staff', role_title: role_title || 'Staff', permissions: Array.isArray(permissions) ? permissions : ['orders'], task }); res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role, role_title: user.role_title, permissions: user.permissions, task: user.task }); });
-app.put('/api/staff/:id/task', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const user = db.updateUserTask(req.params.id, req.body.task); if (!user) return res.status(404).json({ error: 'User not found' }); res.json({ id: user.id, name: user.name, email: user.email, role: user.role, task: user.task }); });
-app.put('/api/staff/:id/access', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const user = db.getUserById(req.params.id); if (!user) return res.status(404).json({ error: 'User not found' }); user.role = req.body.role === 'admin' ? 'admin' : 'staff'; user.role_title = String(req.body.role_title || user.role_title || 'Staff'); user.permissions = Array.isArray(req.body.permissions) ? req.body.permissions : ['orders']; db.saveDatabase(); res.json({ id: user.id, name: user.name, email: user.email, role: user.role, role_title: user.role_title, permissions: user.permissions, task: user.task || '' }); });
-app.get('/api/staff/archived', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); res.json(db.getArchivedStaffUsers()); });
-app.delete('/api/staff/:id', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const user = db.getUserById(req.params.id); if (!user || !['admin', 'staff'].includes(user.role)) return res.status(404).json({ error: 'Team member not found' }); user.archived_at = new Date().toISOString(); user.blocked = true; db.saveDatabase(); res.json({ success: true, id: user.id }); });
-app.delete('/api/staff/:id/permanent', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const index = db.users.findIndex(user => user.id === Number(req.params.id) && ['admin', 'staff'].includes(user.role)); if (index === -1) return res.status(404).json({ error: 'Team member not found' }); db.users.splice(index, 1); db.saveDatabase(); res.json({ success: true, id: Number(req.params.id) }); });
-app.put('/api/staff/:id/reactivate', authenticateToken, (req, res) => { if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super Admin permission required' }); const user = db.getUserById(req.params.id); if (!user) return res.status(404).json({ error: 'Team member not found' }); delete user.archived_at; user.blocked = false; db.saveDatabase(); res.json(user); });
+const requireTeamManager = (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.authRole)) {
+    res.status(403).json({ error: 'Restaurant administrator permission required' });
+    return false;
+  }
+  return true;
+};
+app.get('/api/platform/analytics', (req, res) => {
+  const rows = (db.db.users || []).filter(user => user.tenant_slug && user.tenant_slug !== 'platform');
+  const slugs = [...new Set(rows.map(user => user.tenant_slug))];
+  const now = new Date();
+  const tenants = slugs.map(slug => {
+    const owner = rows.find(user => user.tenant_slug === slug && ['admin', 'super_admin'].includes(user.role));
+    const orders = (db.db.orders || []).filter(order => order.tenant_slug === slug);
+    const monthOrders = orders.filter(order => { const date = new Date(order.created_at || 0); return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth(); });
+    const revenue = orders.reduce((sum, order) => sum + Number(order.total_amount || order.total || 0), 0);
+    return { name: slug.replace(/-/g, ' ').replace(/\b\w/g, char => char.toUpperCase()), slug, owner: owner?.name || 'No owner assigned', revenue, orders: monthOrders.length, verified: Boolean(owner) };
+  });
+  const activity = (db.db.audit_logs || []).filter(item => item.tenant_slug && item.tenant_slug !== 'platform').sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)).slice(0, 8).map(item => ({ action: item.action, entity: item.entity, tenant_slug: item.tenant_slug, actor_name: item.actor_name || 'Platform Admin', created_at: item.created_at }));
+  const applications = [...(db.db.platform_applications || [])];
+  const removedTenantSlugs = new Set((db.db.platform_deleted_tenants || []).map(item => item.slug));
+  for (const slug of slugs.filter(item => !removedTenantSlugs.has(item))) {
+    const owner = rows.find(user => user.tenant_slug === slug && ['admin', 'super_admin'].includes(user.role));
+    if (!applications.some(item => item.tenant_slug_created === slug)) {
+      const ownerApplication = db.insertCollection('platform_applications', { name: owner?.name || slug.replace(/-/g, ' '), email: owner?.email || '', restaurant: slug, phone: owner?.phone || '', status: owner ? 'active' : 'pending', tenant_slug_created: slug, source: owner ? 'tenant_owner' : 'tenant_record' });
+      applications.push(ownerApplication);
+    }
+  }
+  applications.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  res.json({ tenants, activeRestaurants: tenants.length, mrr: tenants.filter(tenant => tenant.verified).length * 100, orders: tenants.reduce((sum, tenant) => sum + tenant.orders, 0), activity, applications });
+});
+app.get('/api/staff', authenticateToken, (req, res) => { if (!requireTeamManager(req, res)) return; const users = req.query.include_customers === '1' ? db.getUsers().filter(user => !user.archived_at) : db.getStaffUsers(); res.json(users.map(user => ({ id: user.id, name: user.name, email: user.email, role: user.role, role_title: user.role_title || (user.role === 'super_admin' ? 'Super Admin' : user.role === 'admin' ? 'Manager' : user.role === 'customer' ? 'Customer account' : 'Staff'), permissions: user.permissions || ['orders'], task: user.task || '', avatar_url: user.avatar_url }))); });
+app.post('/api/staff', authenticateToken, (req, res) => { if (!requireTeamManager(req, res)) return; const { name, email, password, role, role_title, permissions, task, avatar_url } = req.body; if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required' }); if (db.getUserByEmail(email)) return res.status(409).json({ error: 'User already exists' }); const user = db.createUser({ name, email, password_hash: password, role: role === 'admin' ? 'admin' : 'staff', role_title: role_title || 'Staff', permissions: Array.isArray(permissions) ? permissions : ['orders'], task, avatar_url }); res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role, role_title: user.role_title, permissions: user.permissions, task: user.task, avatar_url: user.avatar_url }); });
+app.put('/api/staff/:id/task', authenticateToken, (req, res) => { if (!requireTeamManager(req, res)) return; const user = db.updateUserTask(req.params.id, req.body.task); if (!user) return res.status(404).json({ error: 'User not found' }); res.json({ id: user.id, name: user.name, email: user.email, role: user.role, task: user.task }); });
+app.put('/api/staff/:id/access', authenticateToken, (req, res) => { if (!requireTeamManager(req, res)) return; const user = db.getUserById(req.params.id); if (!user) return res.status(404).json({ error: 'User not found' }); if (['admin', 'staff', 'customer'].includes(req.body.role)) user.role = req.body.role; user.role_title = String(req.body.role_title || user.role_title || (user.role === 'customer' ? 'Customer account' : 'Staff')); user.permissions = Array.isArray(req.body.permissions) ? req.body.permissions : (user.permissions || ['orders']); db.saveDatabase(); res.json({ id: user.id, name: user.name, email: user.email, role: user.role, role_title: user.role_title, permissions: user.permissions, task: user.task || '', avatar_url: user.avatar_url }); });
+app.get('/api/staff/archived', authenticateToken, (req, res) => { if (!requireTeamManager(req, res)) return; res.json(db.getArchivedStaffUsers()); });
+app.delete('/api/staff/:id', authenticateToken, (req, res) => { if (!requireTeamManager(req, res)) return; const user = db.getUserById(req.params.id); if (!user || !['customer', 'admin', 'staff'].includes(user.role) || (user.role === 'admin' && req.authRole !== 'super_admin')) return res.status(404).json({ error: 'Team member cannot be deleted' }); user.archived_at = new Date().toISOString(); user.blocked = true; db.saveDatabase(); res.json({ success: true, id: user.id }); });
+app.delete('/api/staff/:id/permanent', authenticateToken, (req, res) => { if (!requireTeamManager(req, res)) return; const index = db.users.findIndex(user => user.id === Number(req.params.id) && ['admin', 'staff'].includes(user.role)); if (index === -1) return res.status(404).json({ error: 'Team member not found' }); db.users.splice(index, 1); db.saveDatabase(); res.json({ success: true, id: Number(req.params.id) }); });
+app.put('/api/staff/:id/reactivate', authenticateToken, (req, res) => { if (!requireTeamManager(req, res)) return; const user = db.getUserById(req.params.id); if (!user) return res.status(404).json({ error: 'Team member not found' }); delete user.archived_at; user.blocked = false; db.saveDatabase(); res.json(user); });
 
 function setSessionCookie(res, user) {
   const token = jwt.sign(
@@ -58,7 +158,7 @@ function setSessionCookie(res, user) {
 }
 
 function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email, role: user.role, role_title: user.role === 'super_admin' ? 'Super Admin' : (user.role_title || ''), permissions: user.role === 'admin' || user.role === 'super_admin' ? ['*'] : (user.permissions || ['orders']), avatar_url: user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`, phone: user.phone, address: user.address, blocked: Boolean(user.blocked), blocked_reason: user.blocked_reason || '' };
+  return { id: user.id, name: user.name, email: user.email, role: user.role, role_title: user.role === 'super_admin' ? 'Super Admin' : (user.role_title || ''), permissions: user.role === 'admin' || user.role === 'super_admin' ? ['*'] : (user.permissions || ['orders']), avatar_url: user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`, phone: user.phone, address: user.address, tenant_slug: user.tenant_slug || 'nomnosh', blocked: Boolean(user.blocked), blocked_reason: user.blocked_reason || '' };
 }
 const isAdminRole = (role) => role === 'admin' || role === 'super_admin';
 
@@ -131,13 +231,22 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(400).json({ error: 'Username/email and password are required' });
   }
 
-  const user = db.getUserByEmail(identifier);
+  // Login may begin from the home restaurant route. Find the account globally
+  // so a tenant customer can still sign in, then the client switches to the
+  // account's own restaurant workspace.
+  const user = db.getUserByEmail(identifier) || db.db.users.find(account => String(account.email || '').toLowerCase() === identifier.toLowerCase());
   if (!user || user.password_hash !== password) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
+  if (user.tenant_slug && user.tenant_slug !== 'platform' && user.role === 'super_admin') {
+    const application = (db.db.platform_applications || []).find(item => item.email.toLowerCase() === user.email.toLowerCase() && item.tenant_slug_created === user.tenant_slug);
+    if (application && !['active', 'paid', 'trial'].includes(application.status)) {
+      return res.status(403).json({ error: 'Your restaurant application is still pending Solutions admin approval.' });
+    }
+  }
 
   setSessionCookie(res, user);
-  res.json({ user: publicUser(user) });
+  res.json({ user: { ...publicUser(user), tenant_slug: user.tenant_slug || 'nomnosh' } });
 });
 
 // Google Identity Services authentication. The browser sends only the GIS credential.
@@ -361,6 +470,18 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
 app.get('/api/categories', (req, res) => {
   res.json(db.getCategories());
 });
+app.post('/api/categories', authenticateToken, (req, res) => {
+  if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin permission required' });
+  const category = db.addCategory(req.body); if (!category) return res.status(400).json({ error: 'Category name is required' }); res.status(201).json(category);
+});
+app.put('/api/categories/:id', authenticateToken, (req, res) => {
+  if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin permission required' });
+  const category = db.updateCategory(req.params.id, req.body); if (!category) return res.status(404).json({ error: 'Category not found' }); res.json(category);
+});
+app.delete('/api/categories/:id', authenticateToken, (req, res) => {
+  if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin permission required' });
+  if (!db.deleteCategory(req.params.id)) return res.status(404).json({ error: 'Category not found' }); res.json({ success: true });
+});
 
 app.get('/api/locations', authenticateToken, (req, res) => {
   if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin permission required' });
@@ -384,7 +505,7 @@ app.delete('/api/locations/:id', authenticateToken, (req, res) => {
 // Menu Items (with category & search)
 app.get('/api/products', (req, res) => {
   const { category, search } = req.query;
-  const items = db.getMenuItems(category, search);
+  const items = db.getMenuItems(category, search).filter(item => req.query.include_unavailable === '1' || item.is_available !== false);
   res.json(items);
 });
 
@@ -583,3 +704,4 @@ startServer().catch(err => {
   console.error('Failed to start server:', err);
   process.exit(1);
 });
+

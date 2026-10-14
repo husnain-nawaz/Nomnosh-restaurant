@@ -29,3 +29,6 @@
   .to-orange-500 { --tw-gradient-to: #f97316 !important; }
   .selection\:bg-amber-500::selection { background-color: #f59e0b !important; }
 }
+/* Preserve modal scrolling without displaying a distracting scrollbar. */
+.modal-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+.modal-scroll::-webkit-scrollbar { display: none; }

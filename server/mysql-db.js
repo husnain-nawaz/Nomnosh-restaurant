@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+const tenantContext = new AsyncLocalStorage();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -774,7 +777,35 @@ const INITIAL_DB = {
 // In-memory + persistent JSON database with full MySQL relational querying & execution
 class MySqlEngine {
   constructor() {
+    this.defaultTenant = 'nomnosh';
     this.db = this.loadDatabase();
+    this.migrateTenantData();
+  }
+
+  runWithTenant(slug, callback) { return tenantContext.run(String(slug || 'nomnosh'), callback); }
+  get currentTenant() { return tenantContext.getStore() || this.defaultTenant; }
+  setTenant(slug) { this.defaultTenant = slug || 'nomnosh'; }
+  ensureTenant(slug) {
+    if (!slug || slug === 'nomnosh' || slug === 'platform') return;
+    // New restaurant tenants start empty. Never copy Nomnosh data into them.
+    if (!this.db.users.some(user => user.tenant_slug === slug)) this.saveDatabase();
+  }
+  createEmptyTenant(slug) {
+    const tables = ['locations','categories','menu_items','orders','order_events','notifications','riders','inventory','coupons','refunds','audit_logs','payment_reconciliations','customer_profiles'];
+    for (const table of tables) this.db[table] = (this.db[table] || []).filter(row => row.tenant_slug !== slug);
+    this.db.users = (this.db.users || []).filter(row => row.tenant_slug !== slug || row.role === 'super_admin');
+    this.saveDatabase();
+  }
+  scope(rows) { return (rows || []).filter(row => row.tenant_slug === this.currentTenant || (!row.tenant_slug && this.currentTenant === 'nomnosh')); }
+  migrateTenantData() {
+    const tenantTables = ['users','locations','categories','menu_items','orders','order_events','notifications','riders','inventory','coupons','refunds','audit_logs','payment_reconciliations','customer_profiles'];
+    for (const table of tenantTables) for (const row of (this.db[table] || [])) if (!row.tenant_slug) row.tenant_slug = table === 'users' && row.role === 'super_admin' ? 'platform' : 'nomnosh';
+    for (const row of (this.db.menu_items || [])) if (!row.category_slug) row.category_slug = (this.db.categories || []).find(category => category.tenant_slug === row.tenant_slug)?.slug || '';
+    // Repair the existing Cheezious demo product that was created before the
+    // custom category selector was wired into the product form.
+    const cheeziousCategory = (this.db.categories || []).find(category => category.tenant_slug === 'cheezious' && category.slug === 'category-1-cheezious');
+    if (cheeziousCategory) for (const row of (this.db.menu_items || [])) if (row.tenant_slug === 'cheezious' && /^cheious product 1$/i.test(String(row.name || '').trim())) row.category_slug = cheeziousCategory.slug;
+    this.saveDatabase();
   }
 
   loadDatabase() {
@@ -1026,40 +1057,40 @@ class MySqlEngine {
   }
 
   // Domain CRUD operations
-  getUsers() { return this.db.users; }
-  getLocations() { return [...(this.db.locations || [])].sort((a, b) => a.id - b.id); }
+  getUsers() { return this.scope(this.db.users); }
+  getLocations() { return [...this.scope(this.db.locations)].sort((a, b) => a.id - b.id); }
   addLocation(locationData) {
     this.db.locations = this.db.locations || [];
     const location = { id: Date.now(), name: locationData.name, address: locationData.address || '', city: locationData.city || '', phone: locationData.phone || '', latitude: Number(locationData.latitude), longitude: Number(locationData.longitude), is_active: locationData.is_active !== false, created_at: new Date().toISOString() };
-    this.db.locations.push(location); this.saveDatabase(); return location;
+    location.tenant_slug = this.currentTenant; this.db.locations.push(location); this.saveDatabase(); return location;
   }
 
-  getCollection(table) { return [...(this.db[table] || [])]; }
+  getCollection(table) { return [...this.scope(this.db[table])]; }
   insertCollection(table, row) {
     this.db[table] = this.db[table] || [];
-    const item = { id: row.id || `${table.slice(0, 3).toUpperCase()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`, created_at: new Date().toISOString(), ...row };
+    const item = { id: row.id || `${table.slice(0, 3).toUpperCase()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`, created_at: new Date().toISOString(), tenant_slug: this.currentTenant, ...row };
     this.db[table].unshift(item); this.saveDatabase(); return item;
   }
   updateCollection(table, id, updates) {
-    const item = (this.db[table] || []).find(row => String(row.id) === String(id));
+    const item = this.scope(this.db[table]).find(row => String(row.id) === String(id));
     if (!item) return null; Object.assign(item, updates, { updated_at: new Date().toISOString() }); this.saveDatabase(); return item;
   }
   updateLocation(id, updates) {
-    const index = (this.db.locations || []).findIndex(location => location.id === Number(id));
+    const index = (this.db.locations || []).findIndex(location => location.id === Number(id) && (location.tenant_slug === this.currentTenant || (!location.tenant_slug && this.currentTenant === 'nomnosh')));
     if (index === -1) return null;
     this.db.locations[index] = { ...this.db.locations[index], ...updates, latitude: Number(updates.latitude ?? this.db.locations[index].latitude), longitude: Number(updates.longitude ?? this.db.locations[index].longitude) };
     this.saveDatabase(); return this.db.locations[index];
   }
-  deleteLocation(id) { const index = (this.db.locations || []).findIndex(location => location.id === Number(id)); if (index === -1) return false; this.db.locations.splice(index, 1); this.saveDatabase(); return true; }
+  deleteLocation(id) { const index = (this.db.locations || []).findIndex(location => location.id === Number(id) && location.tenant_slug === this.currentTenant); if (index === -1) return false; this.db.locations.splice(index, 1); this.saveDatabase(); return true; }
   getUserByEmail(email) {
-    return this.db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    return this.scope(this.db.users).find(u => u.email.toLowerCase() === email.toLowerCase());
   }
 
   getUserByGoogleId(googleId) {
-    return this.db.users.find(u => u.google_id === googleId);
+    return this.scope(this.db.users).find(u => u.google_id === googleId);
   }
   getUserById(id) {
-    return this.db.users.find(u => u.id === Number(id));
+    return this.db.users.find(u => u.id === Number(id) && (u.tenant_slug === this.currentTenant || u.tenant_slug === 'platform'));
   }
   createUser(userData) {
     const newUser = {
@@ -1077,20 +1108,30 @@ class MySqlEngine {
       task: userData.task || '',
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
+    newUser.tenant_slug = this.currentTenant;
     this.db.users.push(newUser);
     this.saveDatabase();
     return newUser;
   }
-  getStaffUsers() { return this.db.users.filter(user => ['super_admin', 'admin', 'staff'].includes(user.role) && !user.archived_at); }
-  getArchivedStaffUsers() { return this.db.users.filter(user => ['admin', 'staff'].includes(user.role) && user.archived_at); }
+  getStaffUsers() { return this.scope(this.db.users).filter(user => ['super_admin', 'admin', 'staff'].includes(user.role) && !user.archived_at); }
+  getArchivedStaffUsers() { return this.scope(this.db.users).filter(user => ['admin', 'staff'].includes(user.role) && user.archived_at); }
   updateUserTask(id, task) { const user = this.db.users.find(item => item.id === Number(id)); if (!user) return null; user.task = task || ''; this.saveDatabase(); return user; }
 
   getCategories() {
-    return [...this.db.categories].sort((a, b) => a.sort_order - b.sort_order);
+    return [...this.scope(this.db.categories)].sort((a, b) => a.sort_order - b.sort_order);
   }
 
+  addCategory(data) {
+    this.db.categories = this.db.categories || [];
+    const category = { id: Date.now(), slug: String(data.slug || data.name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'), name: String(data.name || '').trim(), banner_title: data.banner_title || data.name, banner_subtitle: data.banner_subtitle || '', sort_order: Number(data.sort_order || this.getCategories().length + 1), tenant_slug: this.currentTenant };
+    if (!category.name || !category.slug) return null;
+    this.db.categories.push(category); this.saveDatabase(); return category;
+  }
+  updateCategory(id, updates) { const item = this.scope(this.db.categories).find(row => row.id === Number(id)); if (!item) return null; Object.assign(item, { ...updates, updated_at: new Date().toISOString() }); this.saveDatabase(); return item; }
+  deleteCategory(id) { const index = this.db.categories.findIndex(row => row.id === Number(id) && row.tenant_slug === this.currentTenant); if (index < 0) return false; this.db.categories.splice(index, 1); this.saveDatabase(); return true; }
+
   getMenuItems(categorySlug = null, search = '') {
-    let items = [...this.db.menu_items];
+    let items = [...this.scope(this.db.menu_items)];
     if (categorySlug && categorySlug !== 'all') {
       items = items.filter(i => i.category_slug === categorySlug);
     }
@@ -1105,11 +1146,13 @@ class MySqlEngine {
   }
 
   addMenuItem(itemData) {
+    const tenantCategory = this.getCategories().find(category => category.slug === itemData.category_slug) || this.getCategories()[0];
     const newItem = {
       id: Date.now(),
-      category_slug: itemData.category_slug,
+      category_slug: tenantCategory?.slug || itemData.category_slug || '',
       name: itemData.name,
       description: itemData.description || "",
+      cuisine: itemData.cuisine || "",
       price: Number(itemData.price),
       original_price: itemData.original_price ? Number(itemData.original_price) : null,
       image_url: itemData.image_url || "/src/assets/images/hero_midnight_pizza_1791465648676.jpg",
@@ -1120,13 +1163,14 @@ class MySqlEngine {
       options_json: itemData.options_json || [],
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
+    newItem.tenant_slug = this.currentTenant;
     this.db.menu_items.push(newItem);
     this.saveDatabase();
     return newItem;
   }
 
   updateMenuItem(id, updates) {
-    const idx = this.db.menu_items.findIndex(i => i.id === Number(id));
+    const idx = this.db.menu_items.findIndex(i => i.id === Number(id) && i.tenant_slug === this.currentTenant);
     if (idx === -1) return null;
     this.db.menu_items[idx] = { ...this.db.menu_items[idx], ...updates };
     this.saveDatabase();
@@ -1134,7 +1178,7 @@ class MySqlEngine {
   }
 
   deleteMenuItem(id) {
-    const idx = this.db.menu_items.findIndex(i => i.id === Number(id));
+    const idx = this.db.menu_items.findIndex(i => i.id === Number(id) && i.tenant_slug === this.currentTenant);
     if (idx === -1) return false;
     this.db.menu_items.splice(idx, 1);
     this.saveDatabase();
@@ -1142,7 +1186,7 @@ class MySqlEngine {
   }
 
   getOrders() {
-    return [...this.db.orders].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return [...this.scope(this.db.orders)].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }
 
   getOrderById(id) {
@@ -1153,6 +1197,7 @@ class MySqlEngine {
     const newId = `NN-${Math.floor(1000 + Math.random() * 9000)}`;
     const newOrder = {
       id: newId,
+      tenant_slug: this.currentTenant,
       user_id: orderData.user_id || null,
       customer_name: orderData.customer_name,
       customer_email: orderData.customer_email || "",

@@ -10,18 +10,27 @@ import OrderTrackingModal from './components/OrderTrackingModal.jsx';
 import LocationModal from './components/LocationModal.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import Footer from './components/Footer.jsx';
+import PlatformSite from './components/PlatformSite.jsx';
 
 export default function App() {
+  const pathSegments = window.location.pathname.split('/').filter(Boolean);
+  const routeSlug = pathSegments[0] || 'solutions';
+  if (routeSlug === 'solutions' || routeSlug === 'platform') return <PlatformSite />;
+  const tenantSlug = routeSlug.toLowerCase();
+  const tenant = { slug: tenantSlug, name: tenantSlug.replace(/-/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) };
+  const storageKey = `restaurant_${tenant.slug}`;
   const [currentUser, setCurrentUser] = useState(null);
-  const [viewMode, setViewMode] = useState(() => sessionStorage.getItem('nomnosh_view_mode') || 'storefront'); // 'storefront' | 'dashboard'
-  const storefrontScrollY = useRef(Number(sessionStorage.getItem('nomnosh_storefront_scroll') || 0));
+  const [tenantAllowed, setTenantAllowed] = useState(['nomnosh', 'cheezious'].includes(tenantSlug) ? true : null);
+  useEffect(() => { const checkAccess = () => fetch(`/api/platform/tenant-status/${encodeURIComponent(tenantSlug)}?t=${Date.now()}`, { cache: 'no-store' }).then(response => response.json()).then(result => { if (!result.allowed) window.location.replace('/solutions'); else setTenantAllowed(true); }).catch(() => window.location.replace('/solutions')); checkAccess(); const timer = window.setInterval(checkAccess, 5000); return () => window.clearInterval(timer); }, [tenantSlug]);
+  const [viewMode, setViewMode] = useState(() => window.location.search.includes('owner_setup=1') ? 'dashboard' : (sessionStorage.getItem(`${storageKey}_view_mode`) || 'storefront')); // 'storefront' | 'dashboard'
+  const storefrontScrollY = useRef(Number(sessionStorage.getItem(`${storageKey}_storefront_scroll`) || 0));
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [activeCategory, setActiveCategory] = useState(() => sessionStorage.getItem('nomnosh_active_category') || 'all');
   const [searchQuery, setSearchQuery] = useState(() => sessionStorage.getItem('nomnosh_search_query') || '');
   const [deliveryLocation, setDeliveryLocation] = useState(() => {
     try {
-      const saved = localStorage.getItem('nomnosh_delivery_location');
+      const saved = localStorage.getItem(`${storageKey}_delivery_location`);
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -31,7 +40,7 @@ export default function App() {
   // Cart State with localStorage persistence
   const [cart, setCart] = useState(() => {
     try {
-      const saved = localStorage.getItem('nomnosh_cart');
+      const saved = localStorage.getItem(`${storageKey}_cart`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -44,11 +53,12 @@ export default function App() {
   const [isLocationOpen, setIsLocationOpen] = useState(false);
   const [selectedItemForModal, setSelectedItemForModal] = useState(null);
   const [activeOrderForTracking, setActiveOrderForTracking] = useState(null);
+  const dashboardRole = ['staff', 'admin', 'super_admin'];
 
   // Sync Cart to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('nomnosh_cart', JSON.stringify(cart));
+      localStorage.setItem(`${storageKey}_cart`, JSON.stringify(cart));
     } catch (e) {
       console.error(e);
     }
@@ -56,7 +66,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      if (deliveryLocation) localStorage.setItem('nomnosh_delivery_location', JSON.stringify(deliveryLocation));
+      if (deliveryLocation) localStorage.setItem(`${storageKey}_delivery_location`, JSON.stringify(deliveryLocation));
     } catch (e) {
       console.error(e);
     }
@@ -64,7 +74,7 @@ export default function App() {
 
   // Require a delivery location before storefront ordering begins.
   useEffect(() => {
-    const isAdmin = ['staff', 'admin', 'super_admin'].includes(currentUser?.role);
+    const isAdmin = ['staff', 'admin', 'super_admin'].includes(currentUser?.role) || (Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0);
     if (deliveryLocation || isAdmin || viewMode === 'dashboard') return undefined;
     const timer = window.setTimeout(() => setIsLocationOpen(true), 3000);
     return () => window.clearTimeout(timer);
@@ -94,6 +104,33 @@ export default function App() {
       .then(items => setProducts(items))
       .catch(console.error);
   }, []);
+
+  // Customers may use the storefront and orders only. Never allow a persisted
+  // dashboard view or a manually-triggered dashboard navigation for them.
+  useEffect(() => {
+    if (currentUser && !dashboardRole.includes(currentUser.role) && viewMode === 'dashboard') {
+      setViewMode('storefront');
+      sessionStorage.setItem(`${storageKey}_view_mode`, 'storefront');
+    }
+  }, [currentUser, viewMode, storageKey]);
+
+  // Re-read the tenant catalog when returning from dashboard edits so newly
+  // created categories and products are available immediately on the store.
+  useEffect(() => {
+    if (viewMode !== 'storefront') return;
+    Promise.all([fetch('/api/categories'), fetch('/api/products')]).then(async ([categoryResponse, productResponse]) => {
+      if (categoryResponse.ok) setCategories(await categoryResponse.json());
+      if (productResponse.ok) setProducts(await productResponse.json());
+    }).catch(console.error);
+  }, [viewMode]);
+
+  // A category saved from an older tenant/catalog must never hide the current
+  // restaurant's full menu after provisioning or catalog changes.
+  useEffect(() => {
+    if (categories.length && activeCategory !== 'all' && !categories.some(category => category.slug === activeCategory)) {
+      setActiveCategory('all');
+    }
+  }, [categories, activeCategory]);
 
   // Cart operations
   const handleAddToCart = (customizedItem) => {
@@ -138,6 +175,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    if (!window.confirm('Are you sure you want to log out?')) return;
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     setCurrentUser(null);
     if (viewMode === 'dashboard') setViewMode('storefront');
@@ -147,18 +185,23 @@ export default function App() {
   const cartTotal = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
 
   const handleViewModeChange = (nextMode) => {
+    if (nextMode === 'dashboard' && !dashboardRole.includes(currentUser?.role)) {
+      setViewMode('storefront');
+      sessionStorage.setItem(`${storageKey}_view_mode`, 'storefront');
+      return;
+    }
     if (viewMode === 'storefront' && nextMode === 'dashboard') storefrontScrollY.current = window.scrollY;
     setViewMode(nextMode);
-    sessionStorage.setItem('nomnosh_view_mode', nextMode);
+    sessionStorage.setItem(`${storageKey}_view_mode`, nextMode);
   };
 
   useEffect(() => {
-    sessionStorage.setItem('nomnosh_view_mode', viewMode);
+    sessionStorage.setItem(`${storageKey}_view_mode`, viewMode);
     if (viewMode === 'storefront') window.requestAnimationFrame(() => window.scrollTo({ top: storefrontScrollY.current, behavior: 'instant' }));
   }, [viewMode]);
 
-  useEffect(() => { sessionStorage.setItem('nomnosh_active_category', activeCategory); }, [activeCategory]);
-  useEffect(() => { sessionStorage.setItem('nomnosh_search_query', searchQuery); }, [searchQuery]);
+  useEffect(() => { sessionStorage.setItem(`${storageKey}_active_category`, activeCategory); }, [activeCategory]);
+  useEffect(() => { sessionStorage.setItem(`${storageKey}_search_query`, searchQuery); }, [searchQuery]);
 
   useEffect(() => {
     const saveScroll = () => { if (viewMode === 'storefront') { storefrontScrollY.current = window.scrollY; sessionStorage.setItem('nomnosh_storefront_scroll', String(window.scrollY)); } };
@@ -175,9 +218,12 @@ export default function App() {
       return matchName || matchDesc;
     }
     if (activeCategory === 'all') return true;
-    return p.category_slug === activeCategory;
+    const normalizeSlug = value => String(value || '').trim().toLowerCase().replace(/\s+/g, '-');
+    return normalizeSlug(p.category_slug) === normalizeSlug(activeCategory);
   });
 
+  if (tenantAllowed === null) return <div className="min-h-screen bg-stone-100 flex items-center justify-center text-sm font-bold text-stone-600">Checking restaurant access…</div>;
+  if (!tenantAllowed) return null;
   return (
     <div className="min-h-screen flex flex-col bg-[#FFFDF9] selection:bg-amber-500 selection:text-white">
       {/* Navigation */}
@@ -193,10 +239,11 @@ export default function App() {
         viewMode={viewMode}
         setViewMode={handleViewModeChange}
         deliveryLocation={deliveryLocation}
+        tenant={tenant}
       />
 
       {/* Main View Mode: Storefront vs Admin Dashboard */}
-      {viewMode === 'dashboard' ? (
+      {viewMode === 'dashboard' && dashboardRole.includes(currentUser?.role) ? (
         <Dashboard
           onReturnToStore={() => handleViewModeChange('storefront')}
           currentUser={currentUser}
@@ -264,8 +311,9 @@ export default function App() {
               </div>
             ) : activeCategory === 'all' ? (
               // Display each category section sequentially with themed headers
-              categories.map(cat => {
-                const catItems = products.filter(p => p.category_slug === cat.slug);
+              <>
+              {categories.map(cat => {
+                const catItems = products.filter(p => String(p.category_slug || '').trim().toLowerCase().replace(/\s+/g, '-') === String(cat.slug || '').trim().toLowerCase().replace(/\s+/g, '-'));
                 return (
                   <CategorySection
                     key={cat.id}
@@ -274,7 +322,9 @@ export default function App() {
                     onSelectItem={setSelectedItemForModal}
                   />
                 );
-              })
+              })}
+              {products.filter(product => !categories.some(category => category.slug === product.category_slug)).length > 0 && <CategorySection category={{ slug: 'other-menu-items', name: 'Other Menu Items' }} items={products.filter(product => !categories.some(category => category.slug === product.category_slug))} onSelectItem={setSelectedItemForModal} />}
+              </>
             ) : (
               // Display only selected category
               (() => {
@@ -326,6 +376,9 @@ export default function App() {
         onClose={() => setIsAuthOpen(false)}
         onAuthSuccess={(user) => {
           setCurrentUser(user);
+          if (user?.tenant_slug && !['platform', 'nomnosh'].includes(user.tenant_slug) && window.location.pathname.split('/')[1] !== user.tenant_slug) {
+            window.location.href = `/${user.tenant_slug}`;
+          }
         }}
       />
 

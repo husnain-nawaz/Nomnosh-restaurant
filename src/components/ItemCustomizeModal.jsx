@@ -12,17 +12,15 @@ export default function ItemCustomizeModal({ item, onClose, onAddToCart }) {
     ? item.sizes_json.map((s, idx) => ({
         id: `size-${idx}`,
         name: typeof s === 'string' ? s : s.name,
-        priceDelta: idx === 0 ? 0 : idx === 1 ? 550 : idx === 2 ? 1100 : 1600
+        priceDelta: typeof s === 'object' ? Number(s.priceDelta || 0) : (idx === 0 ? 0 : idx === 1 ? 550 : idx === 2 ? 1100 : 1600)
       }))
     : isPizza
-    ? [
-        { id: 'sm', name: 'Small 7" (Single)', priceDelta: 0 },
-        { id: 'md', name: 'Medium 10" (2-3 Persons)', priceDelta: 550 },
-        { id: 'lg', name: 'Large 13" (3-4 Persons)', priceDelta: 1100 }
-      ]
-    : [
-        { id: 'std', name: 'Standard Portion', priceDelta: 0 }
-      ];
+      ? [
+          { id: 'sm', name: 'Small 7" (Single)', priceDelta: 0 },
+          { id: 'md', name: 'Medium 10" (2-3 Persons)', priceDelta: 550 },
+          { id: 'lg', name: 'Large 13" (3-4 Persons)', priceDelta: 1100 }
+        ]
+      : [];
 
   const crustOptions = [
     { id: 'pan', name: 'Original Pan Crust', priceDelta: 0 },
@@ -41,10 +39,11 @@ export default function ItemCustomizeModal({ item, onClose, onAddToCart }) {
   ];
   const customOptionGroups = Array.isArray(item.options_json) ? item.options_json : [];
   const hasCustomOptions = customOptionGroups.length > 0;
+  const hasConfiguredCrust = customOptionGroups.some(group => String(group.name || '').toLowerCase().includes('crust'));
 
   const [selectedSize, setSelectedSize] = useState(sizeOptions[0]);
-  const [selectedCrust, setSelectedCrust] = useState(crustOptions[0]);
-  const [selectedSpice, setSelectedSpice] = useState(spiceLevels[1]);
+  const [selectedCrust, setSelectedCrust] = useState(hasConfiguredCrust ? crustOptions[0] : null);
+  const [selectedSpice, setSelectedSpice] = useState(null);
   const [selectedAddons, setSelectedAddons] = useState([]);
   const [selectedCustomOptions, setSelectedCustomOptions] = useState({});
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -149,7 +148,7 @@ export default function ItemCustomizeModal({ item, onClose, onAddToCart }) {
           )}
 
           {/* Crust Choice (for Pizzas) */}
-          {isPizza && (
+          {isPizza && hasConfiguredCrust && (
             <div className="space-y-2.5">
               <label className="text-xs font-bold text-stone-500 uppercase tracking-wider block">
                 Choose Crust Type
@@ -184,7 +183,8 @@ export default function ItemCustomizeModal({ item, onClose, onAddToCart }) {
               <label className="text-xs font-bold uppercase tracking-wider text-stone-500">{group.name}</label>
               {group.type === 'notes' ? <textarea rows={2} value={selectedCustomOptions[groupIndex]?.[0]?.name || ''} onChange={e => setSelectedCustomOptions({ ...selectedCustomOptions, [groupIndex]: [{ name: e.target.value, price: 0 }] })} placeholder="Add your instructions" className="w-full rounded-xl border border-stone-200 p-3 text-xs" /> : <div className="grid gap-2 sm:grid-cols-2">{(group.options || []).map((option, optionIndex) => { const selected = (selectedCustomOptions[groupIndex] || []).some(item => item.name === option.name); return <button type="button" key={`${option.name}-${optionIndex}`} onClick={() => { const current = selectedCustomOptions[groupIndex] || []; const next = group.type === 'multiple' ? (selected ? current.filter(item => item.name !== option.name) : [...current, option]) : [option]; setSelectedCustomOptions({ ...selectedCustomOptions, [groupIndex]: next }); }} className={`rounded-xl border p-3 text-left text-xs ${selected ? 'border-amber-500 bg-amber-50 font-semibold' : 'border-stone-200 hover:border-stone-300'}`}><span>{option.name}</span>{Number(option.price) > 0 && <span className="float-right font-mono text-amber-700">+Rs. {Number(option.price).toLocaleString()}</span>}</button> })}</div>}
             </div>
-          )) : <>
+          )) : null}
+          {false && <>
           {/* Spice Level */}
           <div className="space-y-2.5">
             <label className="text-xs font-bold text-stone-500 uppercase tracking-wider block flex items-center gap-1.5">
@@ -257,7 +257,6 @@ export default function ItemCustomizeModal({ item, onClose, onAddToCart }) {
             />
           </div>
           </>}
-
           {hasCustomOptions && <div className="space-y-2"><label className="block text-xs font-bold uppercase tracking-wider text-stone-500">Cooking or Delivery Notes</label><textarea rows={2} value={specialInstructions} onChange={e => setSpecialInstructions(e.target.value)} placeholder="Add a note for the kitchen or rider" className="w-full resize-none rounded-xl border border-stone-200 p-3 text-xs" /></div>}
         </div>
 

@@ -11,7 +11,8 @@ export default function Navbar({
   onLogout,
   viewMode,
   setViewMode,
-  deliveryLocation
+  deliveryLocation,
+  tenant = { name: 'NOM NOSH' }
 }) {
   return (
     <header className="sticky top-0 z-40 bg-[#FCF8F2]/95 backdrop-blur-md border-b border-amber-200/60 shadow-xs">
@@ -33,7 +34,7 @@ export default function Navbar({
             </div>
             <div className="flex flex-col">
               <span className="font-extrabold text-2xl tracking-tighter text-stone-900 group-hover:text-amber-600 transition-colors uppercase font-['Syne',sans-serif]">
-                NOM <span className="text-amber-600">NOSH</span>
+                {tenant.name.split(' ')[0]} <span className="text-amber-600">{tenant.name.split(' ').slice(1).join(' ')}</span>
               </span>
               <span className="text-[10px] tracking-widest uppercase font-semibold text-stone-500 -mt-1">
                 Pizza & Fast Food
@@ -70,7 +71,7 @@ export default function Navbar({
         {/* Right Action Zone */}
         <div className="flex items-center gap-3">
           {/* Switch Storefront <-> Dashboard */}
-          {(['staff', 'admin', 'super_admin'].includes(currentUser?.role)) && (
+          {['staff', 'admin', 'super_admin'].includes(currentUser?.role) && (
             <button
               type="button"
               onClick={() => setViewMode(viewMode === 'dashboard' ? 'storefront' : 'dashboard')}
