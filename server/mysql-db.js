@@ -2,12 +2,30 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { execFileSync } from 'node:child_process';
 
 const tenantContext = new AsyncLocalStorage();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_FILE = path.join(__dirname, '../data/mysql_database.json');
+const MYSQL_BIN = process.env.MYSQL_BIN || 'C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysql.exe';
+const MYSQL_ARGS = ['-h', process.env.MYSQL_HOST || '127.0.0.1', '-P', process.env.MYSQL_PORT || '3306', '-u', process.env.MYSQL_USER || 'root', `-p${process.env.MYSQL_PASSWORD || 'admin'}`, '--database=nomnosh_pizza', '--batch', '--skip-column-names'];
+
+function mysql(sql) {
+  try { return execFileSync(MYSQL_BIN, MYSQL_ARGS, { input: sql, encoding: 'utf8', windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] }).trim(); }
+  catch (err) { return ''; }
+}
+
+function loadMysqlState() {
+  const raw = mysql('SELECT data FROM app_state WHERE id=1;');
+  try { return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+
+function saveMysqlState(data) {
+  const json = JSON.stringify(data).replace(/\\/g, '\\\\').replace(/'/g, "''");
+  mysql(`INSERT INTO app_state (id, data) VALUES (1, '${json}') ON DUPLICATE KEY UPDATE data=VALUES(data);`);
+}
 
 // Ensure data folder exists
 const dataDir = path.dirname(DATA_FILE);
@@ -809,6 +827,8 @@ class MySqlEngine {
   }
 
   loadDatabase() {
+    const mysqlData = loadMysqlState();
+    if (mysqlData) return mysqlData;
     try {
       if (fs.existsSync(DATA_FILE)) {
         const raw = fs.readFileSync(DATA_FILE, 'utf-8');
@@ -830,11 +850,8 @@ class MySqlEngine {
   }
 
   saveDatabase(data) {
-    try {
-      fs.writeFileSync(DATA_FILE, JSON.stringify(data || this.db, null, 2), 'utf-8');
-    } catch (err) {
-      console.error("Failed to write to MySQL db file:", err);
-    }
+    try { saveMysqlState(data || this.db); }
+    catch (err) { console.error("Failed to write to MySQL:", err); }
   }
 
   // Schema DDL representation
